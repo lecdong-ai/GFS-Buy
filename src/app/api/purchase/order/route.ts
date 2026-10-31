@@ -1,0 +1,78 @@
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+
+// GET /api/purchase/order?orderDate=2026-10-30&status=미입고
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const orderDate = searchParams.get('orderDate');
+    const status = searchParams.get('status');
+    const search = searchParams.get('search');
+
+    const where: any = {};
+    if (orderDate) where.orderDate = orderDate;
+    if (status && status !== '전체') where.status = status;
+    if (search) {
+      where.OR = [
+        { orderNo: { contains: search } },
+        { partnerName: { contains: search } },
+      ];
+    }
+
+    const orders = await prisma.purchaseOrder.findMany({
+      where,
+      include: {
+        partner: true,
+        details: {
+          include: {
+            product: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return NextResponse.json({ success: true, data: orders });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to fetch purchase orders' },
+      { status: 500 }
+    );
+  }
+}
+
+// POST /api/purchase/order (발주 상태 변경 또는 취소)
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { action, id, orderNo, status, cancelReason } = body;
+
+    if (action === 'cancel' && (id || orderNo)) {
+      const updated = await prisma.purchaseOrder.update({
+        where: id ? { id: Number(id) } : { orderNo },
+        data: {
+          status: '발주취소',
+          cancelReason: cancelReason || '사용자 요청에 의한 발주 취소',
+          cancelDate: new Date().toISOString().slice(0, 10),
+        },
+      });
+      return NextResponse.json({ success: true, message: '발주가 성공적으로 취소되었습니다.', data: updated });
+    }
+
+    if (action === 'update_status' && id) {
+      const updated = await prisma.purchaseOrder.update({
+        where: { id: Number(id) },
+        data: { status },
+      });
+      return NextResponse.json({ success: true, data: updated });
+    }
+
+    return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to update purchase order' },
+      { status: 500 }
+    );
+  }
+}
+

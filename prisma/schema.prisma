@@ -1,0 +1,1224 @@
+// =============================================================================
+// ProdCore: (주)GFS — Prisma Schema
+// 최고의 웹기반 ERP를 위한 데이터베이스 스키마
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./gfs-erp.db"
+}
+
+// =============================================================================
+// 1. 기준정보 (Master Data)
+// =============================================================================
+
+/// 기초코드 클래스 — 56개 코드 그룹 (STR, CPT, TXC, PRD, GFS, ...)
+model BaseCodeClass {
+  id        String   @id            // 코드클래스 (예: STR, CPT, GFS)
+  name      String                  // 코드클래스명 (예: 창고, 거래처타입, 계명칭)
+  sortOrder Int      @default(0)    // 정렬순서
+  remark    String   @default("")   // 비고
+  isUsed    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  details BaseCodeDetail[]
+}
+
+/// 기초코드 상세 — 각 클래스별 코드 항목
+model BaseCodeDetail {
+  id        Int      @id @default(autoincrement())
+  classId   String                  // FK → BaseCodeClass
+  code      String                  // 코드 (예: W01, S, T1)
+  name      String                  // 코드명 (예: 상온보관고, 매출처, 과세)
+  sortOrder Int      @default(0)
+  val1      String   @default("")   // 확장 값 1
+  val2      String   @default("")   // 확장 값 2
+  val3      String   @default("")   // 확장 값 3
+  val4      String   @default("")   // 확장 값 4
+  val5      String   @default("")   // 확장 값 5
+  remark    String   @default("")   // 비고
+  isUsed    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  codeClass BaseCodeClass @relation(fields: [classId], references: [id])
+
+  @@unique([classId, code])
+  @@index([classId])
+}
+
+/// 거래처 — 207개 매입처/매출처/당사
+model Partner {
+  id            String   @id          // 거래처id (예: V001)
+  name          String                // 거래처명
+  partnerType   String   @default("P") // S=매출처, P=매입처, O=당사
+  bizNo         String   @default("") // 사업자번호
+  ceoName       String   @default("") // 대표자
+  bizType       String   @default("") // 업태
+  bizCategory   String   @default("") // 종목
+  zipCode       String   @default("")
+  address       String   @default("")
+  addressDetail String   @default("")
+  tel           String   @default("")
+  fax           String   @default("")
+  email         String   @default("")
+  contactPerson String   @default("") // 담당자
+  contactTel    String   @default("")
+  bankName      String   @default("") // 거래은행
+  bankAccount   String   @default("") // 계좌번호
+  bankHolder    String   @default("") // 예금주
+  taxType       String   @default("T1") // 과세구분: T1=과세, T2=면세, T3=영세
+  leadTime      Int      @default(1)  // 조달기간(일)
+  orderMethod   String   @default("") // 주문방법 (EDI, 전화, FAX)
+  orderDay      String   @default("") // 발주요일 (월,화,수,...)
+  closingDate   String   @default("") // 마감일자
+  paymentTerms  String   @default("") // 결제조건
+  remark        String   @default("")
+  isUsed        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  products          Product[]
+  purchaseOrders    PurchaseOrder[]
+  receivings        Receiving[]
+
+  @@index([partnerType])
+  @@index([name])
+}
+
+/// 계 마스터 — 46개 작업장(계)
+model GyeMaster {
+  id        String   @id            // 계id (예: GFS053, GFS005)
+  name      String                  // 계명칭 (예: 간편식, 성형장(김밥))
+  sortOrder Int      @default(0)
+  isUsed    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products     Product[]
+  bomDetails   BomDetail[]
+  workOrders   WorkOrder[]
+}
+
+/// GS리테일 센터
+model GsCenter {
+  id         Int      @id @default(autoincrement())
+  centerCode String                 // 센터코드 (예: GSR-001)
+  centerName String                 // 센터명 (예: GSR 김해일배)
+  shift      String   @default("1편") // 편수: 1편, 2편
+  status     String   @default("대기")  // 출고완료, 진행중, 대기
+  abbrevName String   @default("")   // 약칭 (예: 김해1)
+  isUsed     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([centerCode])
+}
+
+/// 제품 마스터 — 완성품/반제품/원부자재 통합
+model Product {
+  id            Int      @id @default(autoincrement())
+  productCode   String   @unique      // 품번 (예: 27000388710)
+  name          String                // 품명 (예: 착한1900핫도그(양배추))
+  spec          String   @default("") // 규격 (예: 130g)
+  unit          String   @default("ea") // 단위 (ea, kg, g, box, 매, L)
+  category      String   @default("완성품") // 구분: 완성품, 반제품, 원재료, 부자재, 포장재
+  kind          String   @default("")   // 품종: 김밥, 도시락, 샌드위치, 주먹밥, 무스비, 햄버거
+  packType      String   @default("")   // 포장타입
+  shift         String   @default("1편") // 편수: 1편, 2편
+  boxQty        Int      @default(1)    // 박스내입수량 (ea/box)
+  palletQty     Int      @default(0)    // 파렛트 입수
+  unitWeight    Float    @default(0)    // 단위 중량
+  gyeId         String?                 // 주 생산 계 (FK → GyeMaster)
+  partnerId     String?                 // 주 거래처 (FK → Partner)
+  warehouse     String   @default("")   // 보관창고
+  safetyStockQty Float   @default(0)    // 안전재고량
+  minOrderQty   Float    @default(0)    // 최소발주수량
+  orderUnitQty  Float    @default(0)    // 발주단위수량
+  discontinuedDate String? // 단종일
+  status        String   @default("정상") // 정상, 단종, 불용
+  remark        String   @default("")
+  isUsed        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  gye      GyeMaster? @relation(fields: [gyeId], references: [id])
+  partner  Partner?   @relation(fields: [partnerId], references: [id])
+
+  prices            ProductPrice[]
+  packagingSpecs    PackagingSpec[]
+  bomHeadersAsParent BomHeader[] @relation("BomParent")
+  bomDetailsAsChild  BomDetail[] @relation("BomChild")
+  reprMappingsAsOrder ReprProduct[] @relation("ReprOrder")
+  reprMappingsAsRepr  ReprProduct[] @relation("ReprBase")
+  salesOrderDetails  SalesOrderDetail[]
+  purchaseOrderDetails PurchaseOrderDetail[]
+  receivingDetails   ReceivingDetail[]
+  inventories        Inventory[]
+  materialLedgers    MaterialLedger[]
+  workOrders         WorkOrder[]
+  productionResults  ProductionResult[]
+  productPnLs        ProductPnL[]
+  recipeCostRates    RecipeCostRate[]
+  safetyStocks       SafetyStock[]
+
+  @@index([category])
+  @@index([kind])
+  @@index([partnerId])
+  @@index([gyeId])
+  @@index([name])
+}
+
+/// 제품 가격 — 이력 관리
+model ProductPrice {
+  id             Int      @id @default(autoincrement())
+  productId      Int                   // FK → Product
+  deliveryPrice  Float    @default(0)  // 납품단가
+  purchasePrice  Float    @default(0)  // 구매단가
+  logisticsRate  Float    @default(0)  // 물류비율(%)
+  effectiveDate  String   @default("") // 적용일
+  remark         String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@index([effectiveDate])
+}
+
+/// 포장구성관리
+model PackagingSpec {
+  id          Int      @id @default(autoincrement())
+  productId   Int                    // FK → Product
+  packageType String   @default("")  // 포장타입
+  width       Float    @default(0)   // 가로(mm)
+  height      Float    @default(0)   // 세로(mm)
+  depth       Float    @default(0)   // 높이(mm)
+  weight      Float    @default(0)   // 중량(g)
+  barcode     String   @default("")  // 바코드
+  remark      String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+}
+
+/// BOM 헤더 — 완성품/반제품의 레시피 구성
+model BomHeader {
+  id              Int      @id @default(autoincrement())
+  parentProductId Int                  // FK → Product (완성품/반제품)
+  version         String   @default("1.0")
+  effectiveDate   String   @default("")
+  remark          String   @default("")
+  isUsed          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  parentProduct Product     @relation("BomParent", fields: [parentProductId], references: [id])
+  details       BomDetail[]
+
+  @@index([parentProductId])
+}
+
+/// BOM 상세 — 다단계 레시피 (level: 1=완성품, 2=반제품, 3=원부자재)
+model BomDetail {
+  id            Int      @id @default(autoincrement())
+  bomHeaderId   Int                    // FK → BomHeader
+  childProductId Int                   // FK → Product (투입 자재/반제품)
+  level         Int      @default(3)   // 1=완성품, 2=반제품, 3=원부자재
+  unitQty       Float    @default(0)   // 단위투입량
+  unit          String   @default("")  // 투입단위 (g, kg, ea, 매)
+  yieldRate     Float    @default(100) // 수율(%) — 80~100
+  gyeId         String?                // 투입공정 계id
+  nextProcess   String   @default("")  // 다음공정
+  sortOrder     Int      @default(0)
+  remark        String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  bomHeader    BomHeader  @relation(fields: [bomHeaderId], references: [id], onDelete: Cascade)
+  childProduct Product    @relation("BomChild", fields: [childProductId], references: [id])
+  gye          GyeMaster? @relation(fields: [gyeId], references: [id])
+
+  @@index([bomHeaderId])
+  @@index([childProductId])
+}
+
+/// 편의점 마스터 — 6,459개 GS25 매장
+model CvsStore {
+  id         Int      @id @default(autoincrement())
+  storeCode  String   @unique         // 점포코드
+  storeName  String                   // 점포명
+  centerCode String   @default("")    // 소속 센터코드
+  region     String   @default("")    // 권역
+  address    String   @default("")    // 주소
+  tel        String   @default("")
+  status     String   @default("영업중") // 영업중, 폐점, 휴업
+  isUsed     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([centerCode])
+  @@index([region])
+}
+
+/// 대표제품 매핑 — N:1 (주문코드 → 대표품번)
+model ReprProduct {
+  id              Int      @id @default(autoincrement())
+  orderProductId  Int                  // FK → Product (주문용/시즌용 품번)
+  reprProductId   Int                  // FK → Product (기준 대표 품번)
+  effectiveDate   String   @default("")
+  expiryDate      String   @default("")
+  remark          String   @default("")
+  isUsed          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  orderProduct Product @relation("ReprOrder", fields: [orderProductId], references: [id])
+  reprProduct  Product @relation("ReprBase", fields: [reprProductId], references: [id])
+
+  @@index([orderProductId])
+  @@index([reprProductId])
+}
+
+
+// =============================================================================
+// 2. 매출관리 (Sales)
+// =============================================================================
+
+/// 주문(수주) 헤더
+model SalesOrder {
+  id           Int      @id @default(autoincrement())
+  orderNo      String   @unique       // 주문번호 (자동채번)
+  orderDate    String                  // 주문일자
+  centerCode   String   @default("")   // GS센터 코드
+  shift        String   @default("1편") // 편수
+  orderType    String   @default("정규") // 정규, 추가, 긴급
+  uploadMethod String   @default("EDI") // EDI, 엑셀, 수기
+  status       String   @default("접수") // 접수, 확정, 취소
+  totalAmount  Float    @default(0)    // 총 금액
+  totalQty     Int      @default(0)    // 총 수량
+  remark       String   @default("")
+  cancelReason String   @default("")   // 취소사유
+  cancelDate   String?                 // 취소일자
+  createdBy    String   @default("")   // 등록자
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  details    SalesOrderDetail[]
+  deliveries Delivery[]
+
+  @@index([orderDate])
+  @@index([status])
+  @@index([centerCode])
+}
+
+/// 주문 상세
+model SalesOrderDetail {
+  id           Int      @id @default(autoincrement())
+  salesOrderId Int                    // FK → SalesOrder
+  productId    Int                    // FK → Product
+  orderQty1    Int      @default(0)  // 1편 주문량
+  orderQty2    Int      @default(0)  // 2편 주문량
+  totalQty     Int      @default(0)  // 합계
+  unitPrice    Float    @default(0)  // 납품단가
+  amount       Float    @default(0)  // 금액
+  remark       String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  product    Product    @relation(fields: [productId], references: [id])
+
+  @@index([salesOrderId])
+  @@index([productId])
+}
+
+/// 납품
+model Delivery {
+  id             Int      @id @default(autoincrement())
+  deliveryNo     String   @unique      // 납품번호
+  salesOrderId   Int?                  // FK → SalesOrder
+  deliveryDate   String                // 납품일자
+  centerCode     String   @default("")
+  shift          String   @default("1편")
+  status         String   @default("대기") // 대기, 출하, 완료, 취소
+  totalAmount    Float    @default(0)
+  totalQty       Int      @default(0)
+  remark         String   @default("")
+  createdBy      String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  salesOrder SalesOrder?     @relation(fields: [salesOrderId], references: [id])
+  details    DeliveryDetail[]
+
+  @@index([deliveryDate])
+  @@index([salesOrderId])
+}
+
+/// 납품 상세
+model DeliveryDetail {
+  id           Int      @id @default(autoincrement())
+  deliveryId   Int                    // FK → Delivery
+  productCode  String                 // 품번
+  productName  String   @default("")  // 품명
+  deliveryQty  Int      @default(0)   // 납품수량
+  unitPrice    Float    @default(0)   // 단가
+  amount       Float    @default(0)   // 금액
+  boxQty       Int      @default(0)   // BOX 수량
+  remark       String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId])
+}
+
+/// 출하지시
+model ShippingOrder {
+  id              Int      @id @default(autoincrement())
+  shippingNo      String   @unique     // 출하지시번호
+  shippingDate    String               // 출하일자
+  centerCode      String   @default("")
+  shift           String   @default("1편")
+  productCode     String   @default("")
+  productName     String   @default("")
+  orderQty        Int      @default(0)
+  shippingQty     Int      @default(0)
+  boxQty          Int      @default(0)
+  status          String   @default("대기")
+  remark          String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([shippingDate])
+}
+
+/// 거래명세서
+model Statement {
+  id            Int      @id @default(autoincrement())
+  statementNo   String   @unique      // 명세서번호
+  statementDate String                // 발행일자
+  partnerId     String   @default("") // 거래처
+  partnerName   String   @default("")
+  totalAmount   Float    @default(0)
+  taxAmount     Float    @default(0)
+  grandTotal    Float    @default(0)
+  status        String   @default("발행") // 발행, 확인, 취소
+  remark        String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([statementDate])
+}
+
+
+// =============================================================================
+// 3. 매입관리 (Purchase)
+// =============================================================================
+
+/// 자재소요량
+model MaterialRequirement {
+  id              Int      @id @default(autoincrement())
+  reqDate         String                // 소요일자
+  shift           String   @default("1편")
+  productCode     String                // 완성품 품번
+  productName     String   @default("")
+  materialCode    String                // 자재 품번
+  materialName    String   @default("")
+  category        String   @default("원재료") // 원재료, 부자재, 포장재
+  requiredQty     Float    @default(0)  // 소요량
+  unit            String   @default("")
+  partnerId       String?               // 거래처
+  partnerName     String   @default("")
+  currentStock    Float    @default(0)  // 현재고
+  shortageQty     Float    @default(0)  // 부족량
+  status          String   @default("미확정") // 미확정, 확정, 발주완료
+  remark          String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([reqDate])
+  @@index([materialCode])
+}
+
+/// 발주 헤더
+model PurchaseOrder {
+  id              Int      @id @default(autoincrement())
+  orderNo         String   @unique     // 발주번호 (예: PO-2026-10-001)
+  orderDate       String               // 발주일자
+  partnerId       String               // FK → Partner
+  partnerName     String   @default("")
+  orderType       String   @default("정기") // 정기, 수시, 시뮬레이션
+  deliveryDate    String   @default("") // 납기일
+  status          String   @default("발주") // 발주, 부분입고, 입고완료, 취소
+  totalAmount     Float    @default(0)
+  cancelReason    String   @default("")
+  cancelDate      String?
+  remark          String   @default("")
+  createdBy       String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  partner  Partner @relation(fields: [partnerId], references: [id])
+  details  PurchaseOrderDetail[]
+
+  @@index([orderDate])
+  @@index([partnerId])
+  @@index([status])
+}
+
+/// 발주 상세
+model PurchaseOrderDetail {
+  id               Int      @id @default(autoincrement())
+  purchaseOrderId  Int                   // FK → PurchaseOrder
+  productId        Int                   // FK → Product (자재)
+  productCode      String   @default("")
+  productName      String   @default("")
+  category         String   @default("원재료")
+  unit             String   @default("")
+  orderQty         Float    @default(0)  // 발주수량
+  unitPrice        Float    @default(0)  // 단가
+  amount           Float    @default(0)  // 금액
+  receivedQty      Float    @default(0)  // 입고완료 수량
+  remainQty        Float    @default(0)  // 미입고 수량
+  minOrderQty      Float    @default(0)  // 최소발주수량
+  orderUnitQty     Float    @default(0)  // 발주단위수량
+  expectedBoxQty   Float    @default(0)  // 입고예정량(BOX)
+  avgDailyUsage    Float    @default(0)  // 일평균 사용량
+  currentStock     Float    @default(0)  // 현재고
+  remark           String   @default("")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id])
+
+  @@index([purchaseOrderId])
+  @@index([productId])
+}
+
+/// 입고 헤더
+model Receiving {
+  id              Int      @id @default(autoincrement())
+  receivingNo     String   @unique     // 입고번호
+  receivingDate   String               // 입고일자
+  partnerId       String               // FK → Partner
+  partnerName     String   @default("")
+  status          String   @default("입고") // 입고, 검수완료, 취소
+  totalAmount     Float    @default(0)
+  cancelReason    String   @default("")
+  cancelDate      String?
+  remark          String   @default("")
+  createdBy       String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  partner  Partner           @relation(fields: [partnerId], references: [id])
+  details  ReceivingDetail[]
+
+  @@index([receivingDate])
+  @@index([partnerId])
+}
+
+/// 입고 상세
+model ReceivingDetail {
+  id             Int      @id @default(autoincrement())
+  receivingId    Int                    // FK → Receiving
+  productId      Int                    // FK → Product
+  productCode    String   @default("")
+  productName    String   @default("")
+  lotNo          String   @default("")  // LOT 번호
+  expiryDate     String   @default("")  // 유통기한
+  receivedQty    Float    @default(0)   // 입고수량
+  unit           String   @default("")
+  unitPrice      Float    @default(0)
+  amount         Float    @default(0)
+  boxQty         Float    @default(0)   // BOX 수량
+  warehouse      String   @default("")  // 입고 창고
+  inspectResult  String   @default("합격") // 합격, 불합격
+  remark         String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  receiving Receiving @relation(fields: [receivingId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id])
+
+  @@index([receivingId])
+  @@index([productId])
+  @@index([expiryDate])
+  @@index([lotNo])
+}
+
+
+// =============================================================================
+// 4. 생산관리 (Production)
+// =============================================================================
+
+/// 작업지시
+model WorkOrder {
+  id              Int      @id @default(autoincrement())
+  workOrderNo     String   @unique     // 작업지시번호
+  workDate        String               // 작업일자
+  shift           String   @default("1편")
+  gyeId           String               // FK → GyeMaster (작업 계)
+  gyeName         String   @default("")
+  productId       Int                  // FK → Product
+  productCode     String   @default("")
+  productName     String   @default("")
+  spec            String   @default("")
+  unit            String   @default("")
+  orderQty        Float    @default(0) // 지시수량
+  prodQty         Float    @default(0) // 실생산량
+  defectQty       Float    @default(0) // 불량수량
+  workSeq         Int      @default(0) // 작업순서
+  nextProcess     String   @default("") // 다음공정
+  status          String   @default("대기") // 대기, 진행중, 완료
+  completeTime    String?              // 완료시간
+  remark          String   @default("")
+  createdBy       String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  gye     GyeMaster @relation(fields: [gyeId], references: [id])
+  product Product   @relation(fields: [productId], references: [id])
+
+  productionResults ProductionResult[]
+
+  @@index([workDate])
+  @@index([gyeId])
+  @@index([productId])
+  @@index([status])
+}
+
+/// 투입실적 (생산실적)
+model ProductionResult {
+  id              Int      @id @default(autoincrement())
+  resultDate      String               // 실적일자
+  workOrderId     Int?                 // FK → WorkOrder
+  shift           String   @default("1편")
+  gyeId           String   @default("")
+  gyeName         String   @default("")
+  productId       Int                  // FK → Product
+  productCode     String   @default("")
+  productName     String   @default("")
+  orderQty        Float    @default(0) // 지시수량
+  prodQty         Float    @default(0) // 생산수량
+  defectQty       Float    @default(0) // 불량수량
+  yieldRate       Float    @default(100) // 수율(%)
+  remark          String   @default("")
+  createdBy       String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workOrder WorkOrder? @relation(fields: [workOrderId], references: [id])
+  product   Product    @relation(fields: [productId], references: [id])
+
+  @@index([resultDate])
+  @@index([workOrderId])
+  @@index([productId])
+}
+
+/// 생산순서등록
+model ProductionSeq {
+  id            Int      @id @default(autoincrement())
+  seqDate       String               // 적용일자
+  shift         String   @default("1편")
+  gyeId         String   @default("")
+  gyeName       String   @default("")
+  productCode   String   @default("")
+  productName   String   @default("")
+  processOrder  Int      @default(0)  // 공정순서
+  nextProcess   String   @default("") // 다음공정
+  remark        String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([seqDate])
+  @@index([gyeId])
+}
+
+/// 추가생산
+model ExtraProduction {
+  id            Int      @id @default(autoincrement())
+  prodDate      String               // 생산일자
+  shift         String   @default("1편")
+  gyeId         String   @default("")
+  gyeName       String   @default("")
+  productCode   String   @default("")
+  productName   String   @default("")
+  spec          String   @default("")
+  extraQty      Float    @default(0)  // 추가생산수량
+  reason        String   @default("")  // 추가 사유
+  status        String   @default("등록") // 등록, 승인, 완료
+  remark        String   @default("")
+  createdBy     String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([prodDate])
+}
+
+/// 폐기등록
+model DiscardRecord {
+  id            Int      @id @default(autoincrement())
+  discardDate   String               // 폐기일자
+  gyeId         String   @default("")
+  gyeName       String   @default("")
+  productCode   String   @default("")
+  productName   String   @default("")
+  spec          String   @default("")
+  unit          String   @default("")
+  discardQty    Float    @default(0)  // 폐기수량
+  reason        String   @default("")  // 폐기사유: 유통기한, 파손, 변질
+  lotNo         String   @default("")
+  expiryDate    String   @default("")
+  remark        String   @default("")
+  createdBy     String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([discardDate])
+}
+
+/// 음식물쓰레기
+model FoodWaste {
+  id          Int      @id @default(autoincrement())
+  wasteDate   String               // 발생일자
+  gyeId       String   @default("")
+  gyeName     String   @default("")
+  wasteType   String   @default("") // 유형
+  wasteQty    Float    @default(0)  // 수량(kg)
+  remark      String   @default("")
+  createdBy   String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([wasteDate])
+}
+
+
+// =============================================================================
+// 5. 재고관리 (Inventory)
+// =============================================================================
+
+/// 현재고 (LOT별 관리)
+model Inventory {
+  id            Int      @id @default(autoincrement())
+  productId     Int                    // FK → Product
+  productCode   String   @default("")
+  productName   String   @default("")
+  category      String   @default("")  // 원재료, 부자재, 포장재
+  lotNo         String   @default("")  // LOT 번호
+  expiryDate    String   @default("")  // 유통기한
+  warehouse     String   @default("")  // 보관창고
+  currentQty    Float    @default(0)   // 현재고 수량
+  unit          String   @default("")
+  unitPrice     Float    @default(0)   // 단가
+  stockAmount   Float    @default(0)   // 재고금액
+  lastInDate    String   @default("")  // 최종입고일
+  lastOutDate   String   @default("")  // 최종출고일
+  remark        String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@index([warehouse])
+  @@index([expiryDate])
+  @@index([lotNo])
+}
+
+/// 자재수불부
+model MaterialLedger {
+  id              Int      @id @default(autoincrement())
+  ledgerDate      String               // 수불일자
+  productId       Int                  // FK → Product
+  productCode     String   @default("")
+  productName     String   @default("")
+  category        String   @default("") // 원재료, 부자재, 포장재
+  unit            String   @default("")
+  carryOverQty    Float    @default(0) // 이월재고
+  inQty           Float    @default(0) // 입고량
+  outQty          Float    @default(0) // 출고량(투입)
+  adjustQty       Float    @default(0) // 조정량
+  currentQty      Float    @default(0) // 현재고 = 이월 + 입고 - 출고 + 조정
+  unitPrice       Float    @default(0)
+  stockAmount     Float    @default(0) // 재고금액
+  txnType         String   @default("") // 거래유형: 입고, 투입, 폐기, 조정, 반품
+  refNo           String   @default("") // 참조번호 (입고번호, 작업지시번호 등)
+  remark          String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([ledgerDate])
+  @@index([productId])
+  @@index([txnType])
+}
+
+/// 재고실사
+model StocktakeRecord {
+  id             Int      @id @default(autoincrement())
+  stocktakeDate  String               // 실사일자
+  productCode    String   @default("")
+  productName    String   @default("")
+  warehouse      String   @default("")
+  lotNo          String   @default("")
+  expiryDate     String   @default("")
+  bookQty        Float    @default(0)  // 장부수량
+  actualQty      Float    @default(0)  // 실사수량
+  diffQty        Float    @default(0)  // 차이 = 실사 - 장부
+  unit           String   @default("")
+  adjustReason   String   @default("")  // 조정사유
+  status         String   @default("미확정") // 미확정, 확정
+  remark         String   @default("")
+  createdBy      String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([stocktakeDate])
+}
+
+/// 창고이동
+model WarehouseMove {
+  id            Int      @id @default(autoincrement())
+  moveDate      String               // 이동일자
+  productCode   String   @default("")
+  productName   String   @default("")
+  fromWarehouse String   @default("")  // 출고창고
+  toWarehouse   String   @default("")  // 입고창고
+  moveQty       Float    @default(0)   // 이동수량
+  unit          String   @default("")
+  lotNo         String   @default("")
+  reason        String   @default("")
+  status        String   @default("완료")
+  remark        String   @default("")
+  createdBy     String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([moveDate])
+}
+
+/// 반품
+model ReturnRecord {
+  id            Int      @id @default(autoincrement())
+  returnDate    String               // 반품일자
+  returnNo      String   @default("") // 반품번호
+  partnerId     String   @default("") // 거래처
+  partnerName   String   @default("")
+  productCode   String   @default("")
+  productName   String   @default("")
+  returnQty     Float    @default(0)  // 반품수량
+  unit          String   @default("")
+  unitPrice     Float    @default(0)
+  amount        Float    @default(0)
+  reason        String   @default("")  // 반품사유: 오배송, 파손, 선도불량
+  status        String   @default("접수") // 접수, 처리완료
+  remark        String   @default("")
+  createdBy     String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([returnDate])
+}
+
+/// 안전재고관리
+model SafetyStock {
+  id              Int      @id @default(autoincrement())
+  productId       Int                  // FK → Product
+  productCode     String   @default("")
+  productName     String   @default("")
+  category        String   @default("")
+  unit            String   @default("")
+  safetyQty       Float    @default(0) // 안전재고량
+  currentQty      Float    @default(0) // 현재고
+  shortageQty     Float    @default(0) // 부족량
+  avgDailyUsage   Float    @default(0) // 일평균 사용량
+  leadTime        Int      @default(1) // 조달기간(일)
+  remark          String   @default("")
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+}
+
+/// 단종제품지정
+model DiscontinuedProduct {
+  id                Int      @id @default(autoincrement())
+  productCode       String   @default("")
+  productName       String   @default("")
+  category          String   @default("")
+  discontinuedDate  String   @default("") // 단종일
+  reason            String   @default("")  // 단종사유
+  remainStock       Float    @default(0)   // 잔여재고
+  disposalPlan      String   @default("")  // 처분계획
+  status            String   @default("지정") // 지정, 처리완료
+  remark            String   @default("")
+  createdBy         String   @default("")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([discontinuedDate])
+}
+
+/// 불용자재 지정
+model UnusedMaterial {
+  id            Int      @id @default(autoincrement())
+  assignDate    String               // 지정일자
+  productCode   String   @default("")
+  productName   String   @default("")
+  category      String   @default("")
+  warehouse     String   @default("")
+  lotNo         String   @default("")
+  expiryDate    String   @default("")
+  assignQty     Float    @default(0)  // 지정수량
+  unit          String   @default("")
+  usePurpose    String   @default("")  // 사용목적: 연구용, 대체투입, 실습
+  useQty        Float    @default(0)   // 사용수량
+  status        String   @default("지정") // 지정, 사용, 폐기
+  remark        String   @default("")
+  createdBy     String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([assignDate])
+}
+
+/// 자재추가불출
+model MaterialExtraIssue {
+  id            Int      @id @default(autoincrement())
+  issueDate     String               // 불출일자
+  gyeId         String   @default("") // 요청 계
+  gyeName       String   @default("")
+  productCode   String   @default("")
+  productName   String   @default("")
+  category      String   @default("")
+  issueQty      Float    @default(0)  // 불출수량
+  unit          String   @default("")
+  reason        String   @default("")  // 불출사유
+  status        String   @default("요청") // 요청, 승인, 완료
+  remark        String   @default("")
+  createdBy     String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([issueDate])
+}
+
+/// 유통기한 폐기관리
+model ExpiryDiscardMgmt {
+  id            Int      @id @default(autoincrement())
+  checkDate     String               // 점검일자
+  productCode   String   @default("")
+  productName   String   @default("")
+  lotNo         String   @default("")
+  expiryDate    String   @default("")  // 유통기한
+  daysRemaining Int      @default(0)   // 잔여일수
+  warehouse     String   @default("")
+  currentQty    Float    @default(0)
+  unit          String   @default("")
+  action        String   @default("")  // 조치: 사용, 폐기, 반품
+  status        String   @default("점검") // 점검, 처리완료
+  remark        String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([expiryDate])
+  @@index([checkDate])
+}
+
+
+// =============================================================================
+// 6. 원가관리 (Cost)
+// =============================================================================
+
+/// 고정 간접비
+model OverheadFixed {
+  id          Int      @id @default(autoincrement())
+  costMonth   String               // 귀속월 (예: 2026-10)
+  costItem    String               // 비목 (전기요금, 운송비, 간접노무비, ...)
+  totalCost   Float    @default(0) // 금액
+  remark      String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([costMonth, costItem])
+  @@index([costMonth])
+}
+
+/// 변동 간접비 (일별)
+model OverheadVariable {
+  id          Int      @id @default(autoincrement())
+  costMonth   String               // 귀속월
+  costItem    String               // 비목 (직접노무비, 컴플레인처리비용, ...)
+  costDate    String               // 일자
+  dailyCost   Float    @default(0) // 일별 금액
+  remark      String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([costMonth])
+  @@index([costDate])
+}
+
+/// 제품별 손익현황
+model ProductPnL {
+  id                   Int      @id @default(autoincrement())
+  pnlMonth             String               // 기준월
+  productId            Int                   // FK → Product
+  productName          String   @default("")
+  salesAmount          Float    @default(0)  // 매출액
+  salesRatio           Float    @default(0)  // 매출비중(%)
+  indirectCostAlloc    Float    @default(0)  // 간접비배분
+  logisticsRate        Float    @default(0)  // 물류비율(%)
+  logisticsCost        Float    @default(0)  // 제품물류비
+  directMaterialTotal  Float    @default(0)  // 단기총투입재료비
+  productionQty        Float    @default(0)  // 생산수량
+  directMaterialCost   Float    @default(0)  // 직접재료비
+  totalCost            Float    @default(0)  // 원가합계
+  salesProfit          Float    @default(0)  // 매출손익
+  profitRate           Float    @default(0)  // 이익율(%)
+  costRatio            Float    @default(0)  // 원가율(%)
+  salesQty             Float    @default(0)  // 매출수량
+  unitPrice            Float    @default(0)  // 개당판매단가
+  unitCost             Float    @default(0)  // 단위원가
+  unitProfit           Float    @default(0)  // 개당손익
+  remark               String   @default("")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([pnlMonth, productId])
+  @@index([pnlMonth])
+  @@index([productId])
+}
+
+/// 월별 손익현황
+model MonthlyPnL {
+  id             Int      @id @default(autoincrement())
+  pnlMonth       String               // 기준월
+  costItem       String               // 비목
+  costToSalesRatio String @default("") // 매출대비비율
+  totalAmount    Float    @default(0)  // 합계
+  day1  Float @default(0)
+  day2  Float @default(0)
+  day3  Float @default(0)
+  day4  Float @default(0)
+  day5  Float @default(0)
+  day6  Float @default(0)
+  day7  Float @default(0)
+  day8  Float @default(0)
+  day9  Float @default(0)
+  day10 Float @default(0)
+  day11 Float @default(0)
+  day12 Float @default(0)
+  day13 Float @default(0)
+  day14 Float @default(0)
+  day15 Float @default(0)
+  day16 Float @default(0)
+  day17 Float @default(0)
+  day18 Float @default(0)
+  day19 Float @default(0)
+  day20 Float @default(0)
+  day21 Float @default(0)
+  day22 Float @default(0)
+  day23 Float @default(0)
+  day24 Float @default(0)
+  day25 Float @default(0)
+  day26 Float @default(0)
+  day27 Float @default(0)
+  day28 Float @default(0)
+  day29 Float @default(0)
+  day30 Float @default(0)
+  day31 Float @default(0)
+  remark         String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([pnlMonth, costItem])
+  @@index([pnlMonth])
+}
+
+/// 완성품 레시피 원가율
+model RecipeCostRate {
+  id              Int      @id @default(autoincrement())
+  calcMonth       String               // 산출월
+  productId       Int                  // FK → Product
+  productCode     String   @default("")
+  productName     String   @default("")
+  category        String   @default("") // 구분
+  kind            String   @default("") // 품종
+  spec            String   @default("")
+  unit            String   @default("")
+  packType        String   @default("")
+  gyeName         String   @default("") // 계명칭
+  recipeCost      Float    @default(0)  // 레시피원가
+  deliveryPrice   Float    @default(0)  // 납품단가
+  diff            Float    @default(0)  // 차이 = 납품단가 - 레시피원가
+  costRate        Float    @default(0)  // 원가율(%) = (레시피원가/납품단가)*100
+  remark          String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([calcMonth, productId])
+  @@index([calcMonth])
+}
+
+
+// =============================================================================
+// 7. 경영현황 (Management)
+// =============================================================================
+
+/// 경영지표 등록/현황
+model KpiRecord {
+  id           Int      @id @default(autoincrement())
+  kpiMonth     String               // 기준월
+  kpiItem      String               // 지표항목 (매출액, 영업이익, 가동률, ...)
+  targetValue  Float    @default(0) // 목표값
+  actualValue  Float    @default(0) // 실적값
+  achieveRate  Float    @default(0) // 달성률(%)
+  unit         String   @default("") // 단위 (원, %, 건)
+  remark       String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([kpiMonth, kpiItem])
+  @@index([kpiMonth])
+}
+
+/// 매입매출현황 (GSR)
+model SalesPurchaseStatus {
+  id            Int      @id @default(autoincrement())
+  statusDate    String               // 기준일자
+  statusMonth   String   @default("") // 기준월
+  salesAmount   Float    @default(0)  // 매출액
+  purchaseAmount Float   @default(0)  // 매입액
+  grossProfit   Float    @default(0)  // 매출총이익
+  grossProfitRate Float  @default(0)  // 매출총이익률(%)
+  remark        String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([statusDate])
+  @@index([statusMonth])
+}
+
+/// 가매출/미출/확정금액현황
+model ProvisionalSalesStatus {
+  id               Int      @id @default(autoincrement())
+  statusDate       String               // 기준일자
+  provisionalSales Float    @default(0) // 가매출
+  undeliveredAmount Float   @default(0) // 미출금액
+  confirmedAmount  Float    @default(0) // 확정금액
+  remark           String   @default("")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([statusDate])
+}
+
+
+// =============================================================================
+// 8. 관리자전용 (Admin)
+// =============================================================================
+
+/// 사용자
+model User {
+  id          Int      @id @default(autoincrement())
+  loginId     String   @unique        // 로그인ID
+  password    String                  // 비밀번호 (해시)
+  name        String                  // 사용자명
+  department  String   @default("")   // 부서
+  position    String   @default("")   // 직급
+  tel         String   @default("")
+  email       String   @default("")
+  role        String   @default("일반") // 관리자, 일반, 생산
+  isActive    Boolean  @default(true)
+  lastLoginAt String?                 // 최종 로그인
+  remark      String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions UserPermission[]
+  systemLogs  SystemLog[]
+}
+
+/// 사용자 권한
+model UserPermission {
+  id          Int      @id @default(autoincrement())
+  userId      Int                    // FK → User
+  menuId      String                 // 메뉴ID (예: sales-order-upload)
+  canRead     Boolean  @default(true)
+  canWrite    Boolean  @default(false)
+  canDelete   Boolean  @default(false)
+  canExport   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, menuId])
+  @@index([userId])
+}
+
+/// 프로그램 수정요청
+model ChangeRequest {
+  id            Int      @id @default(autoincrement())
+  requestNo     String   @default("")  // 요청번호
+  requestDate   String                 // 요청일자
+  requester     String   @default("")  // 요청자
+  menuId        String   @default("")  // 대상 메뉴
+  title         String                 // 요청 제목
+  description   String   @default("")  // 상세 내용
+  priority      String   @default("보통") // 긴급, 높음, 보통, 낮음
+  status        String   @default("접수") // 접수, 검토, 진행, 완료, 반려
+  assignee      String   @default("")  // 담당자
+  completeDate  String?                // 완료일자
+  remark        String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([requestDate])
+  @@index([status])
+}
+
+/// 시스템 사용 로그
+model SystemLog {
+  id          Int      @id @default(autoincrement())
+  logDate     String               // 로그일시
+  userId      Int?                 // FK → User
+  loginId     String   @default("")
+  userName    String   @default("")
+  action      String   @default("") // 로그인, 메뉴접근, 데이터변경, 로그아웃
+  menuId      String   @default("")
+  menuName    String   @default("")
+  detail      String   @default("") // 상세 (변경내용 등)
+  ipAddress   String   @default("")
+  createdAt   DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([logDate])
+  @@index([userId])
+  @@index([action])
+}
+

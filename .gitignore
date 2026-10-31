@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Next.js build
+.next/
+out/
+
+# Production
+build/
+dist/
+
+# Env (secret 포함이므로 커밋 제외)
+.env
+.env*.local
+
+# Prisma DB (로컬 sqlite - 필요시 별도 백업)
+prisma/*.db
+prisma/*.db-journal
+prisma/backups/
+
+# TypeScript build info
+*.tsbuildinfo
+next-env.d.ts
+
+# OS / Editor
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+*.log
+.vscode/
+.idea/
+
+# Excel backups / temp
+*_backup*.xlsx
+~$*.xlsx

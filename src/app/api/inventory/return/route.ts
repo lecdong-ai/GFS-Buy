@@ -1,0 +1,120 @@
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+
+// GET /api/inventory/return?returnDate=2026-10-30
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const returnDate = searchParams.get('returnDate');
+
+    const where: any = {};
+    if (returnDate) where.returnDate = returnDate;
+
+    const returns = await prisma.returnRecord.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return NextResponse.json({ success: true, data: returns });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to fetch return records' },
+      { status: 500 }
+    );
+  }
+}
+
+// POST /api/inventory/return (반품 등록 및 재고/수불부 반영)
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { returnDate, partnerName, items = [], createdBy = 'admin' } = body;
+
+    if (!returnDate || items.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'returnDate and items are required' },
+        { status: 400 }
+      );
+    }
+
+    const createdRecords = [];
+    for (const item of items) {
+      const returnQty = Number(item.returnQty || 0);
+      const unitPrice = Number(item.unitPrice || 0);
+      const amount = returnQty * unitPrice;
+
+      const record = await prisma.returnRecord.create({
+        data: {
+          returnDate,
+          returnNo: item.orderNo || `RET-${Date.now().toString().slice(-6)}`,
+          partnerName: partnerName || '',
+          productName: item.itemName,
+          returnQty,
+          unit: item.unit || 'ea',
+          unitPrice,
+          amount,
+          reason: item.returnReason || '품질 불량',
+          status: '처리완료',
+          remark: item.remark || '',
+          createdBy,
+        },
+      });
+      createdRecords.push(record);
+
+      // 대상 제품 조회
+      const product = await prisma.product.findFirst({
+        where: { name: item.itemName },
+      });
+
+      if (product) {
+        // 현재고 차감
+        const inv = await prisma.inventory.findFirst({
+          where: { productId: product.id },
+        });
+        if (inv) {
+          await prisma.inventory.update({
+            where: { id: inv.id },
+            data: {
+              currentQty: Math.max(0, inv.currentQty - returnQty),
+              lastOutDate: returnDate,
+            },
+          });
+        }
+
+        // 자재수불부(MaterialLedger) 반품 기장
+        await prisma.materialLedger.create({
+          data: {
+            ledgerDate: returnDate,
+            productId: product.id,
+            productCode: product.productCode,
+            productName: item.itemName,
+            category: item.category || '원재료',
+            unit: item.unit || 'ea',
+            carryOverQty: 0,
+            inQty: 0,
+            outQty: returnQty,
+            adjustQty: 0,
+            currentQty: 0,
+            unitPrice,
+            stockAmount: amount,
+            txnType: '반품출고',
+            refNo: record.returnNo,
+            remark: `반품등록: ${item.returnReason || ''}`,
+          },
+        });
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `${createdRecords.length}건의 반품 내역이 등록되어 현재고 및 자재수불부에 반영되었습니다.`,
+      data: createdRecords,
+    });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to register return' },
+      { status: 500 }
+    );
+  }
+}
+

@@ -1,0 +1,57 @@
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const pnlMonth = searchParams.get('pnlMonth') || '2026-10';
+
+    const list = await prisma.monthlyPnL.findMany({
+      where: { pnlMonth },
+      orderBy: { id: 'asc' },
+    });
+    return NextResponse.json({ success: true, data: list });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { rows } = body;
+
+    if (Array.isArray(rows)) {
+      const results = [];
+      for (const r of rows) {
+        if (!r.costItem) continue;
+        const upserted = await prisma.monthlyPnL.upsert({
+          where: {
+            pnlMonth_costItem: {
+              pnlMonth: r.pnlMonth || '2026-10',
+              costItem: r.costItem,
+            },
+          },
+          update: {
+            costToSalesRatio: r.costToSalesRatio || '',
+            totalAmount: Number(r.totalAmount) || 0,
+            remark: r.remark || '',
+          },
+          create: {
+            pnlMonth: r.pnlMonth || '2026-10',
+            costItem: r.costItem,
+            costToSalesRatio: r.costToSalesRatio || '',
+            totalAmount: Number(r.totalAmount) || 0,
+            remark: r.remark || '',
+          },
+        });
+        results.push(upserted);
+      }
+      return NextResponse.json({ success: true, data: results });
+    }
+
+    return NextResponse.json({ success: false, error: 'Rows array required' }, { status: 400 });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
