@@ -13,6 +13,7 @@ interface InItem {
   bagPrice?: number;
   supplierHeader?: string;
   safetyStock?: number;
+  stockDays?: number | null; // GFS 버팀일 (calc.stockDays 그대로)
 }
 
 // POST /api/gfs/materialize
@@ -164,15 +165,16 @@ export async function POST(req: NextRequest) {
       if (!product) {
         if (dryRun) {
           // 미리보기: 생성될 내용만 안내
-          matched.push({
-            name: rawName,
-            boxes,
-            status: '신규예정',
-            warehouse: ref?.warehouse || '',
-            vendor: ref?.vendor || it.supplierHeader || '',
-            bagPrice: Number(it.bagPrice) || Number(ref?.bagPrice) || 0,
-            packUnit: Number(it.packUnit) || Number(ref?.packUnit) || 0,
-          });
+        matched.push({
+          name: rawName,
+          boxes,
+          status: '신규예정',
+          warehouse: ref?.warehouse || '',
+          vendor: ref?.vendor || it.supplierHeader || '',
+          bagPrice: Number(it.bagPrice) || Number(ref?.bagPrice) || 0,
+          packUnit: Number(it.packUnit) || Number(ref?.packUnit) || 0,
+          gfsDays: it.stockDays != null && !isNaN(Number(it.stockDays)) ? Number(it.stockDays) : null,
+        });
         } else {
           failed.push({ name: rawName, reason: '생성 실패' });
         }
@@ -208,6 +210,7 @@ export async function POST(req: NextRequest) {
         partnerName: partner?.name || '',
         warehouse: product.warehouse,
         created: wasCreated,
+        gfsDays: it.stockDays != null && !isNaN(Number(it.stockDays)) ? Number(it.stockDays) : null,
       });
     }
 

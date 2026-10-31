@@ -1222,3 +1222,18 @@ model SystemLog {
   @@index([action])
 }
 
+
+/// GFS 버팀일 스냅샷 — 스마트발주 산출 시점의 품목별 재고버팀일 (엑셀 N열과 대조용)
+model GfsSnapshot {
+  id          Int      @id @default(autoincrement())
+  productCode String   @unique // FK 대용 (Product.productCode)
+  productName String   @default("")
+  warehouse   String   @default("")
+  stockDays   Float? // GFS calc.stockDays (null = 산출 없음)
+  asOf        String   @default("") // 산출 기준일 (YYYY-MM-DD)
+  remark      String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([warehouse])
+}

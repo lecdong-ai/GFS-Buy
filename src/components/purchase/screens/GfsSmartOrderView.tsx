@@ -121,6 +121,10 @@ export const GfsSmartOrderView: React.FC = () => {
           packUnit: Number(m?.packUnit ?? 0),
           bagPrice: Number(m?.unitPrice ?? 0),
           supplierHeader: String(m?.supplier?.name || m?.supplier || ''),
+          stockDays:
+            m?.calc?.stockDays != null && !isNaN(Number(m.calc.stockDays))
+              ? Number(m.calc.stockDays)
+              : null,
         }))
         .filter((x) => x.name && x.boxes > 0);
       if (orderables.length === 0) {
@@ -152,6 +156,26 @@ export const GfsSmartOrderView: React.FC = () => {
           partnerId: m.partnerId || undefined,
         }));
       setItemsText(JSON.stringify(forOrder));
+      // GFS 버팀일 스냅샷 저장 (재고조회 대조용)
+      try {
+        const snapItems = (matched as any[])
+          .filter((m: any) => m.productCode)
+          .map((m: any) => ({
+            productCode: m.productCode,
+            productName: m.productName,
+            warehouse: m.warehouse || '',
+            stockDays: m.gfsDays != null ? m.gfsDays : null,
+          }));
+        if (snapItems.length > 0) {
+          await fetch('/api/gfs/snapshot', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: snapItems }),
+          });
+        }
+      } catch {
+        /* 스냅샷 실패는 발주 흐름과 무관하게 무시 */
+      }
       const msg =
         `매칭 ${matched.length}건` +
         (newProducts.length ? ` · 신규생성 ${newProducts.length}건(${newProducts.slice(0, 3).map((c: any) => c.name).join(', ')}${newProducts.length > 3 ? ' 외' : ''})` : '') +

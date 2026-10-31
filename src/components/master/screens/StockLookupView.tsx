@@ -63,6 +63,8 @@ interface StockItem {
   shortage: number; // currentStock - safetyStock (negative = danger)
   status: string; // 품절/부족/과잉/정상
   stockDays: number | null; // 재고유지일 — 발주서 엑셀 N열 보이는 숫자 그대로 (없으면 null)
+  gfsDays: number | null; // GFS 버팀일 스냅샷 (산출 시점 live 값)
+  gfsAsOf: string; // 스냅샷 기준일
   unitPrice: number;
   totalAmount: number; // currentStock * unitPrice
 }
@@ -146,7 +148,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     lotNo: 'LOT-261030-01', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '곡류',
-    itemName: '신동진 햅쌀 (1등급)', orderSupplier: '', orderDays: 0,
+    itemName: '신동진 햅쌀 (1등급)', orderSupplier: '', orderDays: 0, gfsDays: null, gfsAsOf: '',
     spec: '20kg/포',
     unit: 'kg',
     inboundDate: 'D+1',
@@ -175,7 +177,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     lotNo: 'LOT-261030-02', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '조미료',
-    itemName: '오뚜기 골드마요네즈', orderSupplier: '', orderDays: 0,
+    itemName: '오뚜기 골드마요네즈', orderSupplier: '', orderDays: 0, gfsDays: null, gfsAsOf: '',
     spec: '3.2kg/통',
     unit: 'kg',
     inboundDate: 'D+2',
@@ -204,7 +206,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     lotNo: 'LOT-261030-03', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '수산가공',
-    itemName: '동원 참치통조림 살코기', orderSupplier: '', orderDays: 0,
+    itemName: '동원 참치통조림 살코기', orderSupplier: '', orderDays: 0, gfsDays: null, gfsAsOf: '',
     spec: '1.88kg/캔',
     unit: 'kg',
     inboundDate: 'D+2',
@@ -233,7 +235,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     lotNo: 'LOT-261030-04', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '건어물',
-    itemName: '삼각김밥용 조미김', orderSupplier: '', orderDays: 0,
+    itemName: '삼각김밥용 조미김', orderSupplier: '', orderDays: 0, gfsDays: null, gfsAsOf: '',
     spec: '1000매/속',
     unit: '매',
     inboundDate: 'D+2',
@@ -262,7 +264,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     lotNo: 'LOT-261030-05', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '부자재',
     category: '포장재',
-    itemName: '삼각김밥 삼면포장필름', orderSupplier: '', orderDays: 0,
+    itemName: '삼각김밥 삼면포장필름', orderSupplier: '', orderDays: 0, gfsDays: null, gfsAsOf: '',
     spec: '5000m/roll',
     unit: 'roll',
     inboundDate: 'D+2',
@@ -291,7 +293,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     lotNo: 'LOT-261030-06', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '부자재',
     category: '용기',
-    itemName: '11찬도시락 2단 트레이', orderSupplier: '', orderDays: 0,
+    itemName: '11찬도시락 2단 트레이', orderSupplier: '', orderDays: 0, gfsDays: null, gfsAsOf: '',
     spec: '400ea/box',
     unit: 'ea',
     inboundDate: 'D+2',
@@ -320,7 +322,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     lotNo: 'LOT-261030-07', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '축산물',
-    itemName: '국내산 돈육 전지 (슬라이스)', orderSupplier: '', orderDays: 0,
+    itemName: '국내산 돈육 전지 (슬라이스)', orderSupplier: '', orderDays: 0, gfsDays: null, gfsAsOf: '',
     spec: '10kg/box',
     unit: 'kg',
     inboundDate: 'D+1',
@@ -349,7 +351,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     lotNo: 'LOT-261030-08', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '축산물',
-    itemName: 'CJ 델리햄 슬라이스', orderSupplier: '', orderDays: 0,
+    itemName: 'CJ 델리햄 슬라이스', orderSupplier: '', orderDays: 0, gfsDays: null, gfsAsOf: '',
     spec: '1kg/pack',
     unit: 'kg',
     inboundDate: 'D+1',
@@ -378,7 +380,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     lotNo: 'LOT-261030-09', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '채소류',
-    itemName: '세척 당근채 (신선편의)', orderSupplier: '', orderDays: 0,
+    itemName: '세척 당근채 (신선편의)', orderSupplier: '', orderDays: 0, gfsDays: null, gfsAsOf: '',
     spec: '5kg/bag',
     unit: 'kg',
     inboundDate: 'D+1',
@@ -407,7 +409,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     lotNo: 'LOT-261030-10', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '채소류',
-    itemName: '양상추 (탈수완료)', orderSupplier: '', orderDays: 0,
+    itemName: '양상추 (탈수완료)', orderSupplier: '', orderDays: 0, gfsDays: null, gfsAsOf: '',
     spec: '5kg/bag',
     unit: 'kg',
     inboundDate: 'D+1',
@@ -436,7 +438,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     lotNo: 'LOT-261030-11', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '냉동가공',
-    itemName: '숯불바비큐 패티 (80g)', orderSupplier: '', orderDays: 0,
+    itemName: '숯불바비큐 패티 (80g)', orderSupplier: '', orderDays: 0, gfsDays: null, gfsAsOf: '',
     spec: '8kg/box',
     unit: 'kg',
     inboundDate: 'D+2',
@@ -465,7 +467,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     lotNo: 'LOT-261030-12', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '냉동가공',
-    itemName: '케이준 치킨텐더 (가공)', orderSupplier: '', orderDays: 0,
+    itemName: '케이준 치킨텐더 (가공)', orderSupplier: '', orderDays: 0, gfsDays: null, gfsAsOf: '',
     spec: '5kg/box',
     unit: 'kg',
     inboundDate: 'D+2',
@@ -494,7 +496,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     lotNo: 'LOT-261030-13', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '완제품',
     category: '삼각김밥',
-    itemName: '참치마요삼각김밥', orderSupplier: '', orderDays: 0,
+    itemName: '참치마요삼각김밥', orderSupplier: '', orderDays: 0, gfsDays: null, gfsAsOf: '',
     spec: '110g',
     unit: 'ea',
     inboundDate: 'D+1',
@@ -523,7 +525,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     lotNo: 'LOT-261030-14', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '완제품',
     category: '도시락',
-    itemName: '11가지찬도시락', orderSupplier: '', orderDays: 0,
+    itemName: '11가지찬도시락', orderSupplier: '', orderDays: 0, gfsDays: null, gfsAsOf: '',
     spec: '430g',
     unit: 'ea',
     inboundDate: 'D+1',
@@ -632,8 +634,9 @@ export const StockLookupView: React.FC = () => {
     Promise.all([
       fetch('/api/inventory/stock').then((res) => res.json()),
       fetch('/api/gfs/order-sheet').then((res) => res.json()).catch(() => null),
+      fetch('/api/gfs/snapshot').then((res) => res.json()).catch(() => null),
     ])
-      .then(([json, orderJson]) => {
+      .then(([json, orderJson, snapJson]) => {
         if (json.success && json.data && json.data.length > 0) {
           // 발주서 정본 맵 (품명 정규화 기준) — 엑셀 우선
           const orderByNorm = new Map<string, any>();
@@ -645,6 +648,19 @@ export const StockLookupView: React.FC = () => {
           }
           let merged = 0;
           let added = 0;
+          const snapMap: Record<string, { stockDays: number | null; asOf: string; productName: string }> =
+            snapJson?.success && snapJson.data?.map ? snapJson.data.map : {};
+          const snapAsOf: string = snapJson?.success ? snapJson.data?.asOf || '' : '';
+          const snapByNorm = new Map<string, { stockDays: number | null; asOf: string }>();
+          Object.values(snapMap).forEach((s: any) => {
+            const k = normName(s.productName || '');
+            if (k && !snapByNorm.has(k) && s.stockDays != null) snapByNorm.set(k, s);
+          });
+          const snapOf = (code: string, name: string) => {
+            if (code && snapMap[code] && snapMap[code].stockDays != null) return snapMap[code];
+            const n = snapByNorm.get(normName(name || ''));
+            return n || null;
+          };
           const loaded: StockItem[] = [];
           const seen = new Set<string>();
           json.data.forEach((inv: any, idx: number) => {
@@ -692,6 +708,11 @@ export const StockLookupView: React.FC = () => {
                 shortage: current - safety,
                 status: calcStockStatus(current, safety),
                 stockDays: nDays,
+                gfsDays: (() => {
+                  const s = snapOf(inv.productCode || inv.product?.productCode || '', name);
+                  return s && s.stockDays != null ? Number(s.stockDays) : null;
+                })(),
+                gfsAsOf: snapAsOf,
                 burnRank: 0,
                 fefoWarn: false,
                 unitPrice: uprice,
@@ -741,7 +762,12 @@ export const StockLookupView: React.FC = () => {
                 safetyStock: autoSafety,
                 shortage: current - autoSafety,
                 status: calcStockStatus(current, autoSafety),
-                stockDays: o.stockDays != null ? Number(o.stockDays) : null,
+                stockDays: o.stockDays != null && !isNaN(Number(o.stockDays)) ? Number(o.stockDays) : null,
+                gfsDays: (() => {
+                  const s = snapOf(o.itemId || '', o.name || '');
+                  return s && s.stockDays != null ? Number(s.stockDays) : null;
+                })(),
+                gfsAsOf: snapAsOf,
                 burnRank: 0,
                 fefoWarn: false,
                 unitPrice: price,
@@ -759,7 +785,7 @@ export const StockLookupView: React.FC = () => {
           setLocked(true);
           setMergeInfo(
             orderByNorm.size > 0
-              ? `정본 병합: ${merged}건 반영 · 신규 ${added}건`
+              ? `정본 병합: ${merged}건 반영 · 신규 ${added}건${snapAsOf ? ` · 버팀일 ${snapAsOf} 기준` : ''}`
               : orderJson?.data?.errors?.length
               ? `정본 실패: ${orderJson.data.errors[0]}`
               : orderJson && !orderJson.success
@@ -976,6 +1002,8 @@ export const StockLookupView: React.FC = () => {
                 shortage: current - newSafety,
                 status: calcStockStatus(current, newSafety),
                 stockDays: nDays,
+                gfsDays: null,
+                gfsAsOf: '',
                 unitPrice: price,
                 totalAmount: current * price,
               };
@@ -1380,6 +1408,41 @@ export const StockLookupView: React.FC = () => {
           {v != null && !isNaN(Number(v)) ? `${Number(v).toFixed(2)}일` : '-'}
         </span>
       ),
+    },
+    {
+      key: 'gfsDays',
+      label: '버팀일(GFS)',
+      width: '85px',
+      align: 'right',
+      sortable: true,
+      editable: false,
+      render: (v) => (
+        <span className={`font-mono ${v != null ? 'text-indigo-700 font-bold' : 'text-gray-400'}`}>
+          {v != null && !isNaN(Number(v)) ? `${Number(v).toFixed(1)}일` : '-'}
+        </span>
+      ),
+    },
+    {
+      key: 'gfsDiff',
+      label: '차이',
+      width: '70px',
+      align: 'right',
+      sortable: false,
+      editable: false,
+      render: (_, row) => {
+        const a = Number(row.stockDays);
+        const b = Number(row.gfsDays);
+        if (row.stockDays == null || row.gfsDays == null || isNaN(a) || isNaN(b)) {
+          return <span className="text-gray-300">-</span>;
+        }
+        const d = b - a;
+        if (Math.abs(d) < 0.05) return <span className="text-gray-500">일치</span>;
+        return (
+          <span className={`font-mono font-bold ${d > 0 ? 'text-blue-700' : 'text-red-600'}`}>
+            {d > 0 ? `+${d.toFixed(1)}` : d.toFixed(1)}
+          </span>
+        );
+      },
     },
     {
       key: 'safetyStock',
