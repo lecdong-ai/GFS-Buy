@@ -192,6 +192,103 @@ export const GfsSmartOrderView: React.FC = () => {
     }
   };
 
+  // ERP 수주+재고를 GFS로 보내기 (GFS 파일 업로드 없이 산출)
+  const [isPushing, setIsPushing] = useState(false);
+
+  const waitGfsAck = (win: Window, type: string, timeoutMs = 10000) => {
+    return new Promise<any>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        window.removeEventListener('message', onMsg);
+        reject(new Error('GFS 응답 시간초과 (iframe이 준비되지 않았을 수 있음)'));
+      }, timeoutMs);
+      const onMsg = (e: MessageEvent) => {
+        if (e.source !== win) return;
+        const d = e.data || {};
+        if (d && d.type === type) {
+          clearTimeout(timer);
+          window.removeEventListener('message', onMsg);
+          resolve(d);
+        }
+      };
+      window.addEventListener('message', onMsg);
+    });
+  };
+
+  const handlePushToGfs = async () => {
+    setIsPushing(true);
+    setStatus('ERP 수주·재고 GFS로 전송 중...');
+    try {
+      const win = iframeRef.current?.contentWindow as Window | null;
+      if (!win) {
+        alert('GFS 화면이 아직 로드되지 않았습니다.');
+        return;
+      }
+      // 1) 당일 수주 (없으면 최근 일자)
+      let orderJson: any = await (await fetch(`/api/sales/order?orderDate=${orderDate}`)).json().catch(() => null);
+      let usedDate = orderDate;
+      if (!orderJson?.success || !Array.isArray(orderJson.data) || orderJson.data.length === 0) {
+        const all = await (await fetch('/api/sales/order')).json().catch(() => null);
+        const list = all?.success && Array.isArray(all.data) ? all.data : [];
+        if (list.length === 0) {
+          alert('ERP에 수주가 없습니다. 먼저 주문등록에서 수주를 등록하세요.');
+          setStatus('수주 없음');
+          return;
+        }
+        usedDate = list[0].orderDate;
+        orderJson = { success: true, data: list.filter((o: any) => o.orderDate === usedDate) };
+      }
+      const menuQty = new Map<string, { menuName: string; qty: number }>();
+      for (const o of orderJson.data || []) {
+        for (const d of o.details || []) {
+          const nm = String(d.product?.name || d.productName || '').trim();
+          const q = Number(d.totalQty) || 0;
+          if (!nm || !(q > 0)) continue;
+          const e = menuQty.get(nm) || { menuName: nm, qty: 0 };
+          e.qty += q;
+          menuQty.set(nm, e);
+        }
+      }
+      const orderItems = [...menuQty.values()].map((m) => ({ menuName: m.menuName, qty: m.qty }));
+      if (orderItems.length === 0) {
+        alert('수주 수량이 없습니다.');
+        setStatus('수주 수량 없음');
+        return;
+      }
+      // 2) 현재고 실사 (창고별)
+      const stockJson = await (await fetch('/api/inventory/stocktake')).json().catch(() => null);
+      const stockRows = stockJson?.success && Array.isArray(stockJson.data) ? stockJson.data : [];
+      const auditItems = stockRows
+        .filter((s: any) => s.itemName && (Number(s.boxQty) > 0 || Number(s.pieceQty) > 0 || Number(s.currentStock) > 0))
+        .map((s: any) => ({
+          name: String(s.itemName),
+          box: Number(s.boxQty) || 0,
+          piece: Number(s.pieceQty) || 0,
+          currentStock: Number(s.currentStock) || 0,
+          sheet: s.warehouse || s.sheet || '',
+        }));
+      // 3) 전송 (수주 → 재고 순)
+      const p1 = waitGfsAck(win, 'GFS_ORDERS_APPLIED');
+      (win as any).postMessage({ type: 'GFS_ORDERS', items: orderItems }, window.location.origin);
+      const ack1 = await p1;
+      if (!ack1.success) throw new Error('수주 반영 실패: ' + (ack1.error || ''));
+      let auditMsg = '';
+      if (auditItems.length > 0) {
+        const p2 = waitGfsAck(win, 'GFS_AUDIT_APPLIED');
+        (win as any).postMessage({ type: 'GFS_AUDIT', items: auditItems }, window.location.origin);
+        const ack2 = await p2;
+        if (!ack2.success) throw new Error('실사 반영 실패: ' + (ack2.error || ''));
+        auditMsg = ` · 실사 ${auditItems.length}건 매칭 ${ack2.matched ?? 0}건`;
+      }
+      setStatus(`GFS 전송 완료 (${usedDate} 수주 ${orderItems.length}종${auditMsg}) — GFS에서 산출 확인 후 [GFS결과 가져오기]`);
+      alert(`GFS로 전송 완료\n수주 ${orderItems.length}종 (${usedDate})${auditMsg}\nGFS 화면에서 산출 결과를 확인하세요.`);
+    } catch (e: any) {
+      alert('GFS 전송 실패: ' + e.message);
+      setStatus('GFS 전송 실패');
+    } finally {
+      setIsPushing(false);
+    }
+  };
+
   // 로그인한 담당자 신원으로 발주 저장
   const handleSaveOrder = async () => {
     if (!itemsText.trim()) {
@@ -245,6 +342,15 @@ export const GfsSmartOrderView: React.FC = () => {
         </span>
         <span className="text-slate-400 whitespace-nowrap hidden lg:inline">· {status}</span>
         <div className="ml-auto flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={handlePushToGfs}
+            disabled={isPushing}
+            className="h-6 px-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded text-[11px] font-bold"
+            title="ERP 수주+재고를 GFS로 보내 산출 (파일 업로드 불필요)"
+          >
+            {isPushing ? '보내는중' : 'GFS로 보내기'}
+          </button>
           <button
             type="button"
             onClick={handleFetchGfs}
