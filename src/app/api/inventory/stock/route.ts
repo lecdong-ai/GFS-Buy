@@ -145,6 +145,7 @@ export async function POST(req: NextRequest) {
       unitPrice?: number;
       expiryDate?: string;
       vendor?: string;
+      safetyStock?: number;
     }>;
     if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ success: false, error: '생성할 재고 내역이 없습니다.' }, { status: 400 });
@@ -160,6 +161,16 @@ export async function POST(req: NextRequest) {
         product = await prisma.product.findFirst({ where: { name: it.productName } });
       }
       if (!product) continue;
+      // 안전재고가 비어 있으면 자동계산값으로 채움 (수기값 유지)
+      const wantSafety = Math.max(0, Math.round(Number(it.safetyStock) || 0));
+      if (wantSafety > 0 && !(Number(product.safetyStockQty) > 0)) {
+        try {
+          product = await prisma.product.update({
+            where: { id: product.id },
+            data: { safetyStockQty: wantSafety },
+          });
+        } catch {}
+      }
       const warehouse = it.warehouse || product.warehouse || '상온';
       const qty = Number(it.currentQty) || 0;
       const price = Number(it.unitPrice) || 0;

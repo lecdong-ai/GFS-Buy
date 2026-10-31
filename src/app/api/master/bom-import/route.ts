@@ -161,6 +161,12 @@ export async function POST(req: NextRequest) {
         productCode = `${codeBase}-${n++}`;
       }
       const bagPrice = Number(ref?.bagPrice) || 0;
+      // 안전재고 자동계산: 일사용량(G발주서 H열)×입수량×조달일수(공급사 D-N, 없으면 2)×1.5
+      const packForSafety = Number(ref?.packUnit) || 0;
+      const leadM = /D-(\d+)/.exec(m.supplierHeader || '');
+      const leadDays = leadM ? Math.max(1, parseInt(leadM[1], 10)) : 2;
+      const autoSafety =
+        m.dailyUsage > 0 && packForSafety > 0 ? Math.round(m.dailyUsage * packForSafety * leadDays * 1.5) : 0;
       const created = await prisma.product.create({
         data: {
           productCode,
@@ -171,6 +177,7 @@ export async function POST(req: NextRequest) {
           kind: '',
           boxQty: Number(ref?.packUnit) || 0,
           warehouse: ref?.warehouse || '',
+          safetyStockQty: autoSafety,
           partnerId: partner?.id || null,
           remark: 'BOM 일괄적재 자동생성(확인필요)',
         },

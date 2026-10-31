@@ -10,6 +10,19 @@ import { exportGridToExcel } from '@/lib/excelExport';
 // 재고조사표 정본 시트 (서버 lib/gfs/canonical.ts와 동일 기준)
 const AUDIT_SHEETS = ['부자재', '냉장1', '냉장2', '냉동', '상온'] as const;
 
+/** 조달일수 파싱: D+1→1, D+2→2, 없으면 2 */
+function parseLeadDays(s: string): number {
+  const m = /D\+(\d+)/.exec(s || '');
+  if (m) return Math.max(1, parseInt(m[1], 10));
+  return 2;
+}
+
+/** 안전재고 자동계산: ROUND(일사용량×입수량×조달일수×1.5) */
+function calcSafetyStock(dailyBox: number, pack: number, leadDays: number): number {
+  if (!(dailyBox > 0) || !(pack > 0)) return 0;
+  return Math.round(dailyBox * pack * leadDays * 1.5);
+}
+
 /** 품명 정규화: [접두어]/괄호/기호 제거 + 소문자 */
 function normName(s: unknown): string {
   return String(s ?? '')
@@ -556,6 +569,7 @@ export const StockLookupView: React.FC = () => {
       let added = 0;
       let updated = 0;
       let same = 0;
+      let autoFilled = 0;
       let tempId = -(Date.now() % 1000000) - 1;
       for (const sheet of AUDIT_SHEETS) {
         const ws = wb.Sheets[sheet];
@@ -579,14 +593,18 @@ export const StockLookupView: React.FC = () => {
           const daily = Number(r[5]) || 0;
           const expiry = r[6] != null && String(r[6]).trim() !== '' ? String(r[6]).trim() : '';
           const exist = nextByNorm.get(norm);
+          // 안전재고 자동계산 (신규·0인 것만, 기존 수기값 유지)
+          const autoSafety = calcSafetyStock(daily, pack, parseLeadDays(inbound));
           if (exist) {
+            const newSafety = (!exist.safetyStock || exist.safetyStock <= 0) && autoSafety > 0 ? autoSafety : exist.safetyStock;
             const changed =
               exist.whName !== sheet ||
               (vendor && exist.vendor !== vendor) ||
               exist.currentStock !== current ||
               (price > 0 && exist.unitPrice !== price) ||
               (expiry && exist.expiryDate !== expiry) ||
-              (pack > 0 && exist.packUnit !== pack);
+              (pack > 0 && exist.packUnit !== pack) ||
+              newSafety !== exist.safetyStock;
             exist.whName = sheet;
             if (vendor) exist.vendor = vendor;
             if (!exist.itemCode && itemId) exist.itemCode = itemId;
@@ -599,14 +617,18 @@ export const StockLookupView: React.FC = () => {
             exist.currentStock = current;
             if (price > 0) exist.unitPrice = price;
             exist.totalAmount = current * exist.unitPrice;
-            exist.shortage = current - exist.safetyStock;
+            exist.safetyStock = newSafety;
+            exist.shortage = current - newSafety;
             if (changed) {
               updated += 1;
+              if (autoSafety > 0) autoFilled += 1;
               dirtyIds.add(exist.id);
             } else {
               same += 1;
             }
           } else {
+            const newSafety = autoSafety > 0 ? autoSafety : 0;
+            if (autoSafety > 0) autoFilled += 1;
             const row: StockItem = {
               id: tempId--,
               whName: sheet,
@@ -624,12 +646,12 @@ export const StockLookupView: React.FC = () => {
               packUnit: pack,
               boxQty: box,
               pieceQty: piece,
-              prevStock: current,
-              inQty: 0,
-              outQty: 0,
-              currentStock: current,
-              safetyStock: 100,
-              shortage: current - 100,
+                prevStock: current,
+                inQty: 0,
+                outQty: 0,
+                currentStock: current,
+                safetyStock: newSafety,
+                shortage: current - newSafety,
               unitPrice: price,
               totalAmount: current * price,
             };
@@ -645,7 +667,7 @@ export const StockLookupView: React.FC = () => {
       setDirtyRowIds(dirtyIds);
       setNewRowIds(freshIds);
       setTargetDate(new Date().toISOString().slice(0, 10));
-      alert(`업로드 반영 완료: 신규 ${added}건 · 변경 ${updated}건 · 동일 ${same}건\n확인 후 저장(Ctrl+S)하세요. 신규는 저장 시 품목 자동생성됩니다.`);
+      alert(`업로드 반영 완료: 신규 ${added}건 · 변경 ${updated}건 · 동일 ${same}건 · 안전재고 자동계산 ${autoFilled}건\n확인 후 저장(Ctrl+S)하세요. 신규는 저장 시 품목 자동생성됩니다.`);
     } catch (e: any) {
       alert('엑셀 파싱 실패: ' + (e.message || '알 수 없는 오류'));
     } finally {
@@ -679,6 +701,7 @@ export const StockLookupView: React.FC = () => {
               packUnit: d.packUnit,
               bagPrice: d.unitPrice,
               supplierHeader: d.vendor,
+              safetyStock: d.safetyStock,
             })),
           }),
         });
@@ -699,6 +722,7 @@ export const StockLookupView: React.FC = () => {
           unitPrice: d.unitPrice,
           expiryDate: d.expiryDate,
           vendor: d.vendor,
+          safetyStock: d.safetyStock,
         }));
         const postRes = await fetch('/api/inventory/stock', {
           method: 'POST',

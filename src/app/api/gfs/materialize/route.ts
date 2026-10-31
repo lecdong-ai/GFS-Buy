@@ -12,6 +12,7 @@ interface InItem {
   packUnit?: number;
   bagPrice?: number;
   supplierHeader?: string;
+  safetyStock?: number;
 }
 
 // POST /api/gfs/materialize
@@ -119,6 +120,7 @@ export async function POST(req: NextRequest) {
         }
         const packUnit = Number(it.packUnit) || Number(ref?.packUnit) || 1;
         const bagPrice = Number(it.bagPrice) || Number(ref?.bagPrice) || 0;
+        const safetyStock = Math.max(0, Math.round(Number(it.safetyStock) || 0));
 
         product = await prisma.product.create({
           data: {
@@ -130,6 +132,7 @@ export async function POST(req: NextRequest) {
             kind: '',
             boxQty: packUnit,
             warehouse,
+            safetyStockQty: safetyStock,
             partnerId,
             remark: 'GFS 자동생성(재고조사표 정본, 확인필요)',
           },
@@ -174,6 +177,20 @@ export async function POST(req: NextRequest) {
           failed.push({ name: rawName, reason: '생성 실패' });
         }
         continue;
+      }
+
+      // 기존 품목의 안전재고가 비어 있으면 자동계산값으로 채움 (수기값 유지)
+      const wantSafety = Math.max(0, Math.round(Number(it.safetyStock) || 0));
+      if (!dryRun && wantSafety > 0 && !(Number((product as any).safetyStockQty) > 0)) {
+        try {
+          product = await prisma.product.update({
+            where: { id: product.id },
+            data: { safetyStockQty: wantSafety },
+            include: { partner: true },
+          });
+          existingByName.set(rawName, product);
+          existingByNorm.set(norm, product);
+        } catch {}
       }
 
       const packUnit = Number(product.boxQty) || Number(it.packUnit) || Number(ref?.packUnit) || 1;

@@ -39,6 +39,7 @@ export interface BomMaterial {
   packUnit: number;
   bagPrice: number;
   days: number;
+  dailyUsage: number; // H열 일사용량(박스)
   menus: BomChildLink[];
 }
 
@@ -76,6 +77,7 @@ export function parseOrderSheetBom(wb: XLSX.WorkBook): BomMaterial[] {
         packUnit: num(r[4]),
         bagPrice: num(r[16]),
         days: num(r[6]),
+        dailyUsage: num(r[7]),
         menus: [],
       };
       // 직전 공급사 헤더는 별도 추적 없이 supplierHeader 비움 (import에서 정본 vendor 사용)
