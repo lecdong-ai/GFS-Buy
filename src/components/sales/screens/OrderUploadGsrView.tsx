@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { SalesActionBar } from '../common/SalesActionBar';
 import { SalesDataGrid, GridColumnDef } from '../common/SalesDataGrid';
@@ -168,7 +168,37 @@ export const OrderUploadGsrView: React.FC = () => {
 
   const handleReset = () => {
     setData(INITIAL_ROWS);
+    setKeyword('');
+    setShowAll(false);
+    setFilterDate(new Date().toISOString().slice(0, 10));
   };
+
+  const [filterDate, setFilterDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [showAll, setShowAll] = useState(false);
+  const [keyword, setKeyword] = useState('');
+
+  const shiftDay = (delta: number) => {
+    const d = new Date(filterDate + 'T00:00:00');
+    d.setDate(d.getDate() + delta);
+    setFilterDate(d.toISOString().slice(0, 10));
+  };
+
+  const filteredData = useMemo(() => {
+    return data.filter((r) => {
+      if (!showAll && r.delivDate !== filterDate) return false;
+      if (keyword.trim()) {
+        const kw = keyword.trim().toLowerCase();
+        if (
+          !String(r.partName || '').toLowerCase().includes(kw) &&
+          !String(r.partNo || '').toLowerCase().includes(kw) &&
+          !String(r.poNo || '').toLowerCase().includes(kw)
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [data, filterDate, showAll, keyword]);
 
   return (
     <div className="flex flex-col h-full w-full bg-[#e2e8f0] select-none text-[12px]">
@@ -177,7 +207,7 @@ export const OrderUploadGsrView: React.FC = () => {
         title="주문등록GSR(upload)"
         buttons={[
           { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: handleReset },
-          { key: 'download', label: '엑셀다운로드', icon: 'excel', variant: 'secondary', onClick: () => exportGridToExcel({ filename: '주문등록_GSR_출하내역', sheetName: '수주내역', columns: COLUMNS, data }) },
+          { key: 'download', label: '엑셀다운로드', icon: 'excel', variant: 'secondary', onClick: () => exportGridToExcel({ filename: '주문등록_GSR_출하내역', sheetName: '수주내역', columns: COLUMNS, data: filteredData }) },
           { key: 'upload', label: '엑셀업로드', icon: 'excel', variant: 'secondary', onClick: openExcelOrderModal },
           { key: 'intake', label: isIntaking ? '등록 중...' : '발주현황 업로드', icon: 'excel', variant: 'primary', onClick: () => fileRef.current?.click() },
         ]}
@@ -205,9 +235,59 @@ export const OrderUploadGsrView: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. 그리드 영역 (#c5c9f7 연보라 헤더, #fdfde0 하단 합계줄) */}
+      {/* 3. 조회 조건 바 (일자별 수주 조회) */}
+      <div className="bg-[#efefef] border-b border-[#c0c0c0] px-3 py-1 flex flex-wrap items-center gap-3 text-[12px] shrink-0">
+        <div className="flex items-center gap-1">
+          <span className="font-semibold text-gray-700">기준일자:</span>
+          <button
+            type="button"
+            onClick={() => shiftDay(-1)}
+            className="px-1.5 py-0.5 bg-white border border-gray-400 rounded-l-xs text-[11px] font-bold hover:bg-gray-100"
+          >
+            &lt;
+          </button>
+          <input
+            type="date"
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+            disabled={showAll}
+            className="bg-white border-y border-gray-400 px-1.5 py-0.5 text-[12px] font-mono outline-none disabled:bg-gray-100 disabled:text-gray-400"
+          />
+          <button
+            type="button"
+            onClick={() => shiftDay(1)}
+            className="px-1.5 py-0.5 bg-white border border-gray-400 rounded-r-xs text-[11px] font-bold hover:bg-gray-100"
+          >
+            &gt;
+          </button>
+        </div>
+        <label className="flex items-center gap-1 cursor-pointer font-medium text-gray-700">
+          <input
+            type="checkbox"
+            checked={showAll}
+            onChange={(e) => setShowAll(e.target.checked)}
+            className="accent-blue-600"
+          />
+          전체 보기
+        </label>
+        <div className="flex items-center gap-1">
+          <span className="font-semibold text-gray-700">검색어:</span>
+          <input
+            type="text"
+            placeholder="품명 / 품번 / 발주번호"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            className="bg-white border border-gray-400 px-2 py-0.5 text-[12px] rounded-xs w-44 outline-none focus:border-blue-500"
+          />
+        </div>
+        <span className="ml-auto text-[11px] text-gray-600 font-semibold bg-white px-2 py-0.5 rounded border border-gray-300">
+          <span className="text-blue-700 font-bold">{filteredData.length}</span>건
+        </span>
+      </div>
+
+      {/* 4. 그리드 영역 (#c5c9f7 연보라 헤더, #fdfde0 하단 합계줄) */}
       <div className="flex-1 p-1 min-h-0 overflow-hidden flex flex-col">
-        <SalesDataGrid columns={COLUMNS} data={data} />
+        <SalesDataGrid columns={COLUMNS} data={filteredData} />
       </div>
     </div>
   );
