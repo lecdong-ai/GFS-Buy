@@ -18,6 +18,7 @@ export interface OrderSheetItem {
   supplierHeader: string;
   boxes: number;
   packUnit: number;
+  days: number; // 발주일수 (G열)
   dailyUsage: number;
   incoming: number;
   currentStock: number;
@@ -111,15 +112,16 @@ export function parseOrderSheet(wb: XLSX.WorkBook): { items: OrderSheetItem[]; s
     const boxes = r[3];
     if (name && String(name).trim().length > 1) {
       items.push({
-        name: String(name).trim(),
-        norm: normName(name),
-        supplierHeader: header,
-        boxes: typeof boxes === 'number' ? boxes : 0,
-        packUnit: Number(r[4]) || 0,
-        dailyUsage: Number(r[7]) || 0,
-        incoming: Number(r[8]) || 0,
-        currentStock: Number(r[9]) || 0,
-        bagPrice: Number(r[16]) || 0,
+          name: String(name).trim(),
+          norm: normName(name),
+          supplierHeader: header,
+          boxes: typeof boxes === 'number' ? boxes : 0,
+          packUnit: Number(r[4]) || 0,
+          days: Number(r[6]) || 0,
+          dailyUsage: Number(r[7]) || 0,
+          incoming: Number(r[8]) || 0,
+          currentStock: Number(r[9]) || 0,
+          bagPrice: Number(r[16]) || 0,
       });
     }
   }

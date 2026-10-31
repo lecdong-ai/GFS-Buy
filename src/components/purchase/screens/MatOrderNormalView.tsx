@@ -1,349 +1,238 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { HelpCircle, Plus, RotateCcw, Calendar, Eye, Save } from 'lucide-react';
+import { HelpCircle, RotateCcw, Calendar, Save } from 'lucide-react';
 
-import { useInlineEdit } from '@/components/common/EditableCell';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
-export interface MatOrderNormalItem {
+
+interface SheetRow {
   id: number;
-  category: string; // 구분 (원재료, 부재료)
-  variety: string; // 품종 (육가공, 소스, 용기, 곡류 등)
-  itemName: string; // 품명
-  spec: string; // 규격
-  unit: string; // 단위
-  orderQty: number; // 발주수량
-  unitPrice: number; // 발주단가
-  orderAmt: number; // 발주금액
-  recvDate: string; // 입고일
-  minOrderQty: number; // 최소발주수량
-  unitQty: number; // Unit 수량
-  safetyStock: number; // 안전재고
-  currentStock: number; // 현재고
-  stockDesc: string; // 재고설명
-  incomingScheduled: number; // 입고예정량
-  totalStockQty: number; // 합계수량
-  lotNo: string; // LOT no.
-  remark: string; // 비고
+  supplier: string;
+  name: string;
+  boxesBase: number; // D 발주량박스(엑셀기준)
+  packUnit: number; // E 입수량(엑셀)
+  packUnitAudit: number; // P 입수량(정본)
+  days: number; // G 발주일수
+  dailyUsage: number; // H 일사용량
+  incoming: number; // I 입고량
+  currentStock: number; // J 금일재고
+  bagPrice: number; // Q 봉단가
+  warehouse: string;
+  vendor: string;
+  finalBoxes: number; // O 확정발주량 (편집)
+  manual: boolean;
 }
 
-export const INITIAL_NORMAL_DATA: MatOrderNormalItem[] = [
-  {
-    id: 1,
-    category: '원재료',
-    variety: '곡류',
-    itemName: '국내산 경기미 20kg',
-    spec: '20kg/포',
-    unit: '포',
-    orderQty: 100,
-    unitPrice: 52000,
-    orderAmt: 5200000,
-    recvDate: '2026-10-31',
-    minOrderQty: 50,
-    unitQty: 1,
-    safetyStock: 30,
-    currentStock: 45,
-    stockDesc: '정상 재고 유지',
-    incomingScheduled: 0,
-    totalStockQty: 45,
-    lotNo: 'LOT-261030-R01',
-    remark: '주말 밥류 증산 대비',
-  },
-  {
-    id: 2,
-    category: '원재료',
-    variety: '김류',
-    itemName: '[상온]1/2절김',
-    spec: '200매*30ea',
-    unit: 'box',
-    orderQty: 5,
-    unitPrice: 48000,
-    orderAmt: 240000,
-    recvDate: '2026-10-31',
-    minOrderQty: 2,
-    unitQty: 30,
-    safetyStock: 10,
-    currentStock: 8,
-    stockDesc: '적정',
-    incomingScheduled: 0,
-    totalStockQty: 8,
-    lotNo: 'LOT-261030-G01',
-    remark: '',
-  },
-  {
-    id: 3,
-    category: '원재료',
-    variety: '김류',
-    itemName: '[상온]삼각김밥김',
-    spec: '100매*32ea',
-    unit: 'box',
-    orderQty: 4,
-    unitPrice: 52000,
-    orderAmt: 208000,
-    recvDate: '2026-10-31',
-    minOrderQty: 2,
-    unitQty: 32,
-    safetyStock: 15,
-    currentStock: 12,
-    stockDesc: '정상',
-    incomingScheduled: 0,
-    totalStockQty: 12,
-    lotNo: 'LOT-261030-G02',
-    remark: '',
-  },
-  {
-    id: 4,
-    category: '원재료',
-    variety: '수산가공',
-    itemName: '[냉장]다진맛살',
-    spec: '10kg*2ea',
-    unit: 'box',
-    orderQty: 6,
-    unitPrice: 52000,
-    orderAmt: 312000,
-    recvDate: '2026-10-31',
-    minOrderQty: 2,
-    unitQty: 2,
-    safetyStock: 8,
-    currentStock: 5,
-    stockDesc: '주의',
-    incomingScheduled: 0,
-    totalStockQty: 5,
-    lotNo: 'LOT-261030-C01',
-    remark: '냉장유지 필수',
-  },
-  {
-    id: 5,
-    category: '원재료',
-    variety: '절임류',
-    itemName: '[냉장]볶음김치',
-    spec: '5kg*3ea',
-    unit: 'box',
-    orderQty: 12,
-    unitPrice: 42000,
-    orderAmt: 504000,
-    recvDate: '2026-10-31',
-    minOrderQty: 3,
-    unitQty: 3,
-    safetyStock: 20,
-    currentStock: 15,
-    stockDesc: '정상',
-    incomingScheduled: 0,
-    totalStockQty: 15,
-    lotNo: 'LOT-261030-K01',
-    remark: '',
-  },
-  {
-    id: 6,
-    category: '원재료',
-    variety: '난가공',
-    itemName: '[냉장]계란구이',
-    spec: '1020g*12ea',
-    unit: 'box',
-    orderQty: 8,
-    unitPrice: 78000,
-    orderAmt: 624000,
-    recvDate: '2026-10-31',
-    minOrderQty: 2,
-    unitQty: 12,
-    safetyStock: 15,
-    currentStock: 10,
-    stockDesc: '정상',
-    incomingScheduled: 0,
-    totalStockQty: 10,
-    lotNo: 'LOT-261030-E01',
-    remark: '',
-  },
-  {
-    id: 7,
-    category: '부재료',
-    variety: '용기',
-    itemName: '두레)ET-30 용기',
-    spec: '50ea*2줄',
-    unit: 'box',
-    orderQty: 10,
-    unitPrice: 38000,
-    orderAmt: 380000,
-    recvDate: '2026-10-31',
-    minOrderQty: 5,
-    unitQty: 2,
-    safetyStock: 25,
-    currentStock: 18,
-    stockDesc: '정상',
-    incomingScheduled: 0,
-    totalStockQty: 18,
-    lotNo: 'LOT-261030-D01',
-    remark: '',
-  },
-  {
-    id: 8,
-    category: '부재료',
-    variety: '용기',
-    itemName: '정우)PP]5찬도시락용기',
-    spec: '80ea*4pk/box',
-    unit: 'box',
-    orderQty: 8,
-    unitPrice: 72000,
-    orderAmt: 576000,
-    recvDate: '2026-10-31',
-    minOrderQty: 4,
-    unitQty: 4,
-    safetyStock: 20,
-    currentStock: 14,
-    stockDesc: '정상',
-    incomingScheduled: 0,
-    totalStockQty: 14,
-    lotNo: 'LOT-261030-J01',
-    remark: '',
-  },
-];
+const DAY_CHARS = ['월', '화', '수', '목', '금', '토', '일'];
+
+function parseDeliveryDays(header: string): boolean[] {
+  const hasAll = /월화수목금토/.test(header);
+  if (hasAll) return [true, true, true, true, true, true, false];
+  if (!/[월화수목금토일]/.test(header)) return [false, false, false, true, false, false, false];
+  return DAY_CHARS.map((d) => header.includes(d));
+}
+
+function calcRow(r: SheetRow) {
+  const pack = r.packUnit > 0 ? r.packUnit : r.packUnitAudit > 0 ? r.packUnitAudit : 0;
+  const totalStock = r.incoming + r.currentStock;
+  const required = r.dailyUsage * r.days;
+  const diff = totalStock - required;
+  const stockDays = r.dailyUsage > 0 ? totalStock / r.dailyUsage : 99;
+  const inpack = r.boxesBase * (r.packUnit || 0);
+  const shortage = Math.max(0, required - totalStock);
+  const suggest = pack > 0 ? Math.ceil(shortage / pack) : 0;
+  const finalBoxes = r.manual ? r.finalBoxes : suggest;
+  const amount = finalBoxes * pack * r.bagPrice;
+  const dailyBox = r.dailyUsage > 0 && pack > 0 ? r.dailyUsage / pack : 0;
+  return { pack, totalStock, required, diff, stockDays, inpack, suggest, finalBoxes, amount, dailyBox };
+}
+
+function splitWeek(r: SheetRow, finalBoxes: number): number[] {
+  const days = parseDeliveryDays(r.supplier || '');
+  const idx = days.map((on, i) => (on ? i : -1)).filter((i) => i >= 0);
+  const out = [0, 0, 0, 0, 0, 0, 0];
+  if (finalBoxes <= 0 || idx.length === 0) return out;
+  const base = Math.floor(finalBoxes / idx.length);
+  let rem = finalBoxes - base * idx.length;
+  idx.forEach((i) => {
+    out[i] = base + (rem > 0 ? 1 : 0);
+    if (rem > 0) rem -= 1;
+  });
+  return out;
+}
 
 export const MatOrderNormalView: React.FC = () => {
-  const [supplier, setSupplier] = useState('[네트웍스]광주식품');
-  const [rows, setRows] = useState<MatOrderNormalItem[]>(INITIAL_NORMAL_DATA);
+  const [orderDate, setOrderDate] = useState('2026-10-30');
+  const [supplierFilter, setSupplierFilter] = useState('전체');
+  const [suppliers, setSuppliers] = useState<string[]>([]);
+  const [rows, setRows] = useState<SheetRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [onlyNeeded, setOnlyNeeded] = useState(false);
+  const [keyword, setKeyword] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [showWeek, setShowWeek] = useState(true);
 
   useEffect(() => {
-    fetch('/api/purchase/order-req-confirm')
+    fetch('/api/gfs/order-sheet')
       .then((res) => res.json())
       .then((json) => {
-        if (json.success && json.data && json.data.length > 0) {
-          const loaded: MatOrderNormalItem[] = json.data.map((r: any, idx: number) => ({
-            id: r.id || idx + 1,
-            category: r.category || '원재료',
-            variety: '원부자재',
-            itemName: r.materialName || '원료',
-            spec: r.spec || '',
-            unit: r.unit || 'kg',
-            orderQty: r.requiredQty || 10,
-            unitPrice: r.unitPrice || 2500,
-            orderAmt: (r.requiredQty || 10) * (r.unitPrice || 2500),
-            inDate: '2026-10-31',
-            minOrderQty: 10,
-            unitQty: 1,
-            safetyStock: 50,
-            currentStock: r.currentStock || 0,
-            stockDesc: '정상',
-            expectedInQty: 0,
-            totalQty: r.requiredQty || 10,
-            lotNo: '',
-            usageQty: r.requiredQty || 10,
-            remark: r.remark || '',
-          }));
+        if (json.success && Array.isArray(json.data?.rows)) {
+          const loaded: SheetRow[] = json.data.rows.map((r: any) => {
+            const pack = r.packUnit || r.packUnitAudit || 0;
+            const total = (r.incoming || 0) + (r.currentStock || 0);
+            const req = (r.dailyUsage || 0) * (r.days || 0);
+            const suggest = pack > 0 ? Math.ceil(Math.max(0, req - total) / pack) : 0;
+            return {
+              id: r.id,
+              supplier: r.supplier || '',
+              name: r.name,
+              boxesBase: r.boxesBase || 0,
+              packUnit: r.packUnit || 0,
+              packUnitAudit: (r as any).packUnitAudit || 0,
+              days: r.days || 0,
+              dailyUsage: r.dailyUsage || 0,
+              incoming: r.incoming || 0,
+              currentStock: r.currentStock || 0,
+              bagPrice: r.bagPrice || 0,
+              warehouse: r.warehouse || '',
+              vendor: r.vendor || '',
+              finalBoxes: suggest,
+              manual: false,
+            };
+          });
           setRows(loaded);
+          setSuppliers(json.data.suppliers || []);
         }
       })
-      .catch((err) => console.error('Failed to load normal order requirements', err));
+      .catch((err) => console.error('Failed to load order sheet', err))
+      .finally(() => setIsLoading(false));
   }, []);
 
+  // 요일 헤더 (발주일 기준 7일)
+  const weekLabels = useMemo(() => {
+    const base = new Date(orderDate + 'T00:00:00');
+    return DAY_CHARS.map((d, i) => {
+      const dt = new Date(base);
+      dt.setDate(dt.getDate() + i);
+      return `${d}(${String(dt.getDate()).padStart(2, '0')})`;
+    });
+  }, [orderDate]);
+
+  const filtered = useMemo(() => {
+    return rows.filter((r) => {
+      if (supplierFilter !== '전체' && r.supplier !== supplierFilter) return false;
+      if (keyword.trim() && !r.name.toLowerCase().includes(keyword.trim().toLowerCase())) return false;
+      if (onlyNeeded) {
+        const c = calcRow(r);
+        if (c.finalBoxes <= 0) return false;
+      }
+      return true;
+    });
+  }, [rows, supplierFilter, keyword, onlyNeeded]);
+
+  const totals = useMemo(() => {
+    let boxes = 0;
+    let amt = 0;
+    filtered.forEach((r) => {
+      const c = calcRow(r);
+      boxes += c.finalBoxes;
+      amt += c.amount;
+    });
+    return { boxes, amt };
+  }, [filtered]);
+
+  const handleFinalChange = (id: number, val: string) => {
+    const num = Math.max(0, Number(val) || 0);
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, finalBoxes: num, manual: true } : r)));
+  };
+
+  const handleReset = () => {
+    setRows((prev) => prev.map((r) => ({ ...r, manual: false, finalBoxes: calcRow({ ...r, manual: false }).suggest })));
+  };
+
   const handleSaveOrder = async () => {
+    const targets = rows
+      .map((r) => ({ r, c: calcRow(r) }))
+      .filter(({ c }) => c.finalBoxes > 0);
+    if (targets.length === 0) {
+      alert('확정 발주량(발주량)이 0보다 큰 품목이 없습니다.');
+      return;
+    }
+    setIsSaving(true);
     try {
-      const res = await fetch('/api/purchase/order-req-confirm', {
+      const matRes = await fetch('/api/gfs/materialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'confirm_and_order',
-          deliveryDate: '2026-10-31',
-          items: rows.map((r) => ({
-            materialCode: `MAT-${r.id}`,
-            materialName: r.itemName,
-            category: r.category,
-            requiredQty: r.orderQty,
-            currentStock: r.currentStock,
-            shortageQty: r.orderQty,
-            orderQty: r.orderQty,
-            unitPrice: r.unitPrice,
-            amount: r.orderAmt,
-            partnerId: 'V001',
-            partnerName: supplier,
+          orderDate,
+          items: targets.map(({ r, c }) => ({
+            name: r.name,
+            boxes: c.finalBoxes,
+            packUnit: c.pack || r.packUnit,
+            bagPrice: r.bagPrice,
+            supplierHeader: r.supplier,
           })),
+        }),
+      });
+      const matJson = await matRes.json();
+      if (!matJson.success) {
+        alert('품목 매칭 실패: ' + (matJson.error || '알 수 없는 오류'));
+        return;
+      }
+      const orderItems = (matJson.data?.matched || [])
+        .filter((m: any) => m.productCode)
+        .map((m: any) => ({
+          productCode: m.productCode,
+          orderQty: m.orderQty,
+          unitPrice: m.boxPrice || 0,
+          partnerId: m.partnerId || undefined,
+        }));
+      if (orderItems.length === 0) {
+        alert('ERP 품목과 매칭된 항목이 없습니다.');
+        return;
+      }
+      const res = await fetch('/api/gfs/order-result', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderDate,
+          memo: '자재발주(일반) 발주시트 확정',
+          items: orderItems,
         }),
       });
       const json = await res.json();
       if (json.success) {
-        alert('자재발주가 성공적으로 확정되어 발주서가 생성되었습니다.');
+        const orders = (json.data || []).map((o: any) => o.orderNo).join(', ');
+        alert(`발주 확정 완료\n${json.message}\n${orders}`);
       } else {
         alert('발주 실패: ' + json.error);
       }
     } catch (err: any) {
       alert('발주 저장 중 오류: ' + err.message);
+    } finally {
+      setIsSaving(false);
     }
-  };
-
-  const totalAmt = useMemo(() => {
-    return rows.reduce((acc, r) => acc + r.orderAmt, 0);
-  }, [rows]);
-
-  const totalQty = useMemo(() => {
-    return rows.reduce((acc, r) => acc + r.orderQty, 0);
-  }, [rows]);
-
-  // ── 인라인 편집 ──
-  const { editingCell, editValue, setEditValue, startEditing, cancelEditing, isEditing } = useInlineEdit();
-  const saveEdit = (rowId: string | number, colKey: string, rows: any[], setRows: (r: any[]) => void) => {
-    setRows(rows.map(r => {
-      const id = r.id ?? r.no ?? r.idx ?? r.index;
-      if (id === rowId) {
-        const numVal = Number(editValue);
-        return { ...r, [colKey]: isNaN(numVal) || editValue.trim() === '' ? editValue : numVal };
-      }
-      return r;
-    }));
-    cancelEditing();
-  };
-
-  const handleQtyChange = (id: number, val: string) => {
-    const num = Number(val) || 0;
-    setRows((prev) =>
-      prev.map((r) => {
-        if (r.id === id) {
-          return {
-            ...r,
-            orderQty: num,
-            orderAmt: num * r.unitPrice,
-          };
-        }
-        return r;
-      })
-    );
-  };
-
-  const handleNew = () => {
-    alert('새로운 일반 자재발주 항목 등록 모달을 호출합니다.');
-  };
-
-  const handleReset = () => {
-    setRows(INITIAL_NORMAL_DATA);
-  };
-
-  const handleViewProducts = (item: MatOrderNormalItem) => {
-    alert(`[${item.itemName}]을 사용하는 생산 레시피 및 제품 목록을 조회합니다.`);
   };
 
   return (
     <div className="flex flex-col h-full w-full bg-[#f0f2f5] select-none text-[12.5px] font-sans">
-      {/* 1. 상단 다크 헤더 바 (101223.png 원본 일치) */}
+      {/* 1. 상단 다크 헤더 바 */}
       <div className="h-[32px] bg-[#333333] border-b border-[#222222] px-3 flex items-center justify-between text-white shrink-0 shadow-sm">
         <div className="flex items-center gap-2">
           <span className="w-1 h-3.5 bg-[#4caf50] rounded-2xs inline-block" />
           <h1 className="text-[13px] font-bold tracking-tight text-white">자재발주 (일반)</h1>
+          <span className="text-[10px] text-gray-300 font-mono">발주시트 미러</span>
         </div>
 
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={handleSaveOrder}
-            className="flex items-center gap-1 px-3 py-1 bg-[#2e7d32] hover:bg-[#1b5e20] text-white rounded-xs text-[11px] font-bold transition-colors shadow-2xs cursor-pointer border border-[#1b5e20]"
+            disabled={isSaving}
+            className="flex items-center gap-1 px-3 py-1 bg-[#2e7d32] hover:bg-[#1b5e20] disabled:opacity-50 text-white rounded-xs text-[11px] font-bold transition-colors shadow-2xs cursor-pointer border border-[#1b5e20]"
           >
             <Save size={12} className="stroke-[2.5]" />
-            발주확정/저장
-          </button>
-          <button
-            type="button"
-            onClick={handleNew}
-            className="flex items-center gap-1 px-3 py-1 bg-[#607d8b] hover:bg-[#546e7a] text-white rounded-xs text-[11px] font-medium transition-colors shadow-2xs cursor-pointer border border-[#455a64]"
-          >
-            <Plus size={12} className="stroke-[2.5]" />
-            신규
+            {isSaving ? '저장 중...' : '발주확정/저장'}
           </button>
           <button
             type="button"
@@ -351,11 +240,18 @@ export const MatOrderNormalView: React.FC = () => {
             className="flex items-center gap-1 px-3 py-1 bg-[#607d8b] hover:bg-[#546e7a] text-white rounded-xs text-[11px] font-medium transition-colors shadow-2xs cursor-pointer border border-[#455a64]"
           >
             <RotateCcw size={12} className="stroke-[2.5]" />
-            초기화
+            산출초기화
           </button>
           <button
             type="button"
-            onClick={() => alert('도움말: 자재발주 (일반) 화면')}
+            onClick={() => setShowWeek((v) => !v)}
+            className="px-3 py-1 bg-[#607d8b] hover:bg-[#546e7a] text-white rounded-xs text-[11px] font-medium transition-colors shadow-2xs cursor-pointer border border-[#455a64]"
+          >
+            {showWeek ? '요일숨기기' : '요일보기'}
+          </button>
+          <button
+            type="button"
+            onClick={() => alert('발주시트 미러: 거래처명~금액 18열 + 요일 7일. 발주량(확정) 수정 시 금액·요일분할 자동계산. 확정분은 품목 자동생성 후 발주서로 저장됩니다.')}
             className="w-5 h-5 flex items-center justify-center rounded-full bg-black hover:bg-gray-800 text-white cursor-pointer ml-1 text-[11px] font-bold"
           >
             <HelpCircle size={13} />
@@ -363,262 +259,160 @@ export const MatOrderNormalView: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. 조건 검색 바 (101223.png 원본 일치) */}
+      {/* 2. 조건 검색 바 */}
       <div className="bg-[#f5f6f8] border-b border-[#cccccc] px-3 py-1 flex items-center justify-between shrink-0 h-[30px]">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <span className="font-bold text-gray-700 text-[11px]">발주일자</span>
             <div className="flex items-center bg-white border border-gray-300 px-2 py-0.5 rounded-xs shadow-2xs text-[11px]">
-              <span className="font-medium text-gray-800 mr-2">2026년 10월 30일 금요일</span>
-              <Calendar size={12} className="text-gray-500" />
+              <input
+                type="date"
+                value={orderDate}
+                onChange={(e) => setOrderDate(e.target.value)}
+                className="font-medium text-gray-800 outline-none"
+              />
+              <Calendar size={12} className="text-gray-500 ml-1" />
             </div>
           </div>
 
           <div className="flex items-center gap-1.5">
             <span className="font-bold text-gray-700 text-[11px]">거래처</span>
             <select
-              value={supplier}
-              onChange={(e) => setSupplier(e.target.value)}
-              className="bg-white border border-gray-300 px-2 py-0.5 text-[11px] font-medium rounded-xs shadow-2xs w-[180px] h-[22px] outline-none focus:border-blue-500"
+              value={supplierFilter}
+              onChange={(e) => setSupplierFilter(e.target.value)}
+              className="bg-white border border-gray-300 px-2 py-0.5 text-[11px] font-medium rounded-xs shadow-2xs w-[220px] h-[22px] outline-none focus:border-blue-500"
             >
-              <option value="[네트웍스]광주식품">[네트웍스]광주식품</option>
-              <option value="[네트웍스]대림">[네트웍스]대림</option>
-              <option value="[네트웍스]CJ">[네트웍스]CJ</option>
-              <option value="다미푸드텍">다미푸드텍</option>
+              <option value="전체">전체 ({suppliers.length})</option>
+              {suppliers.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
             </select>
           </div>
+
+          <div className="flex items-center gap-1.5">
+            <input
+              type="text"
+              placeholder="품명 검색"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              className="bg-white border border-gray-300 px-2 py-0.5 text-[11px] rounded-xs w-[180px] h-[22px] outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <label className="flex items-center gap-1 cursor-pointer text-[11px] font-bold text-gray-700">
+            <input type="checkbox" checked={onlyNeeded} onChange={(e) => setOnlyNeeded(e.target.checked)} />
+            발주대상만
+          </label>
         </div>
 
         <div className="text-[11px] text-gray-700 font-semibold bg-white px-2.5 py-0.5 rounded-xs border border-gray-300 shadow-2xs">
-          LblCnt_M: <span className="font-bold text-blue-700">{rows.length}</span>
+          품목: <span className="font-bold text-blue-700">{filtered.length}</span>
+          {' '}발주: <span className="font-bold text-emerald-700">{totals.boxes.toLocaleString()}박스</span>
+          {' '}<span className="font-bold text-gray-900">{totals.amt.toLocaleString()}원</span>
         </div>
       </div>
 
-      {/* 3. 대형 데이터 그리드 (101223.png 정확 일치 19개 컬럼) */}
+      {/* 3. 발주시트 미러 그리드 */}
       <div className="flex-1 p-0.5 min-h-0 overflow-hidden flex flex-col bg-white">
         <div className="flex-1 min-h-0 overflow-auto border border-[#a4abb6]">
+          {isLoading ? (
+            <div className="py-20 text-center text-gray-500">발주서 정본을 불러오는 중입니다...</div>
+          ) : (
           <EditableTableWrapper><table className="w-full min-w-full border-collapse text-[12.5px] font-sans">
             <thead className="sticky top-0 z-20 bg-[#c5cbf0] text-gray-900 font-semibold border-b border-[#9098aa]">
               <tr className="h-[32px] leading-tight text-center whitespace-nowrap font-bold">
-                {/* 구분 */}
-                <th className="border border-[#9098aa] px-1.5 py-0.5 w-[55px] min-w-[55px] text-center">
-                  <div className="flex items-center justify-center gap-0.5">
-                    <span>구분</span>
-                    
-                  </div>
-                </th>
-
-                {/* 품종 */}
-                <th className="border border-[#9098aa] px-1.5 py-0.5 w-[65px] min-w-[65px] text-center">
-                  <div className="flex items-center justify-center gap-0.5">
-                    <span>품종</span>
-                    
-                  </div>
-                </th>
-
-                {/* 품명 */}
-                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[280px] text-center">
-                  <div className="flex items-center justify-center gap-0.5">
-                    <span>품명</span>
-                    
-                  </div>
-                </th>
-
-                {/* 규격 */}
-                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[120px] text-center">
-                  <div className="flex items-center justify-center gap-0.5">
-                    <span>규격</span>
-                    
-                  </div>
-                </th>
-
-                {/* 단위 */}
-                <th className="border border-[#9098aa] px-1 py-0.5 w-[45px] min-w-[45px] text-center">
-                  단위
-                </th>
-
-                {/* 발주수량 */}
-                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[65px] text-center">
-                  발주수량
-                </th>
-
-                {/* 발주단가 */}
-                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[75px] text-center">
-                  발주단가
-                </th>
-
-                {/* 발주금액 */}
-                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[90px] text-center">
-                  발주금액
-                </th>
-
-                {/* 입고일 */}
-                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[75px] text-center">
-                  <div className="flex items-center justify-center gap-0.5">
-                    <span>입고일</span>
-                    
-                  </div>
-                </th>
-
-                {/* 최소발주수량 (2줄) */}
-                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[65px] text-center">
-                  <span>최소발주수량</span>
-                </th>
-
-                {/* Unit 수량 */}
-                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[65px] text-center">
-                  Unit 수량
-                </th>
-
-                {/* 안전재고 */}
-                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[65px] text-center">
-                  안전재고
-                </th>
-
-                {/* 현재고 */}
-                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[65px] text-center">
-                  현재고
-                </th>
-
-                {/* 재고설명 (101223.png 컬럼) */}
-                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[80px] text-center">
-                  재고설명
-                </th>
-
-                {/* 입고예정량 */}
-                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[75px] text-center">
-                  입고예정량
-                </th>
-
-                {/* 합계수량 */}
-                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[65px] text-center">
-                  합계수량
-                </th>
-
-                {/* LOT no. */}
-                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[100px] text-center">
-                  LOT no.
-                </th>
-
-                {/* 비고 */}
-                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[85px] text-center">
-                  비고
-                </th>
-
-                {/* 사용제품보기 (2줄) */}
-                <th className="border border-[#9098aa] px-1.5 py-0.5 min-w-[65px] text-center">
-                  <span>사용제품보기</span>
-                </th>
+                <th className="border border-[#9098aa] px-1.5 py-0.5 w-[40px]">No</th>
+                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[160px] text-left">거래처명</th>
+                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[280px] text-left">품목</th>
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[75px]" title="D 발주량박스(엑셀기준)">발주량박스</th>
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[60px]" title="E 입수량">입수량</th>
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[75px]" title="F 발주량입수 = D×E">발주량입수</th>
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[60px]" title="G 발주일수">발주일수</th>
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[70px]" title="H 일사용량">일사용량</th>
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[70px]" title="I 입고량(입수)">입고량</th>
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[70px]" title="J 금일재고(봉)">금일재고</th>
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[70px]" title="K 총재고량 = I+J">총재고량</th>
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[70px]" title="L 필요값 = H×G">필요값</th>
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[70px]" title="M 차이 = K-L">차이</th>
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[70px]" title="N 재고유지일">재고유지일</th>
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[75px] bg-[#b5bbf5]" title="O 확정발주량(박스)">발주량</th>
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[60px]" title="P 입수량(정본)">입수량</th>
+                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[80px] text-right" title="Q 봉단가">봉단가</th>
+                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[100px] text-right" title="R 금액 = O×P×Q">금액</th>
+                {showWeek && weekLabels.map((d) => (
+                  <th key={d} className="border border-[#9098aa] px-1 py-0.5 min-w-[55px]">{d}</th>
+                ))}
+                {showWeek && (
+                  <th className="border border-[#9098aa] px-1 py-0.5 min-w-[70px]" title="AA 일사용량(박스)">일(박스)</th>
+                )}
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.id}
-                  className="h-[21px] border-b border-gray-300 hover:bg-[#eef3fb] bg-white text-gray-900"
-                >
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center text-gray-700">
-                    {row.category}
+              {filtered.map((row, idx) => {
+                const c = calcRow(row);
+                const week = splitWeek(row, c.finalBoxes);
+                const neg = c.diff < 0;
+                return (
+                <tr key={row.id} className="h-[21px] border-b border-gray-300 hover:bg-[#eef3fb] bg-white text-gray-900">
+                  <td className="border border-gray-300 text-center text-gray-500 font-mono text-[11px] bg-gray-50">{idx + 1}</td>
+                  <td className="border border-gray-300 whitespace-nowrap px-2 py-0.5 text-left text-gray-800" title={row.supplier}>{row.supplier}</td>
+                  <td className="border border-gray-300 whitespace-nowrap px-2 py-0.5 text-left font-medium" title={`${row.name}${row.vendor ? ` / ${row.vendor}` : ''}${row.warehouse ? ` [${row.warehouse}]` : ''}`}>{row.name}</td>
+                  <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-600">{row.boxesBase || '-'}</td>
+                  <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-600">{row.packUnit || '-'}</td>
+                  <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-700">{c.inpack ? c.inpack.toLocaleString() : '-'}</td>
+                  <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono">{row.days || '-'}</td>
+                  <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono">{row.dailyUsage || '-'}</td>
+                  <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono">{row.incoming || '-'}</td>
+                  <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono">{row.currentStock.toLocaleString()}</td>
+                  <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono font-medium">{c.totalStock.toLocaleString()}</td>
+                  <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-700">{c.required ? Math.round(c.required * 10) / 10 : '-'}</td>
+                  <td className={`border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono font-bold ${neg ? 'text-red-600' : 'text-blue-700'}`}>
+                    {Number.isFinite(c.diff) ? (c.diff > 0 ? `+${Math.round(c.diff)}` : Math.round(c.diff)) : '-'}
                   </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1.5 py-0.5 text-center text-gray-700 font-medium">
-                    {row.variety}
+                  <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-600">
+                    {Number.isFinite(c.stockDays) && c.stockDays !== 99 ? (Math.round(c.stockDays * 10) / 10) : '-'}
                   </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-left font-medium text-gray-900 ">
-                    {row.itemName}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-center text-gray-700 ">
-                    {row.spec}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center text-gray-700">
-                    {row.unit}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap p-0 text-right font-mono bg-white">
+                  <td className="border border-gray-300 p-0 text-right font-mono bg-amber-50/40">
                     <input
                       type="number"
-                      value={row.orderQty}
-                      onChange={(e) => handleQtyChange(row.id, e.target.value)}
+                      value={row.manual ? row.finalBoxes : c.suggest}
+                      onChange={(e) => handleFinalChange(row.id, e.target.value)}
                       className="w-full h-full text-right font-bold text-gray-900 border-none outline-none focus:ring-1 focus:ring-blue-500 bg-transparent px-1.5"
                     />
                   </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono text-gray-800">
-                    {row.unitPrice.toLocaleString()}
+                  <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-600">{c.pack || '-'}</td>
+                  <td className="border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono text-gray-800">{row.bagPrice ? row.bagPrice.toLocaleString() : '-'}</td>
+                  <td className="border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono font-bold text-emerald-700 bg-emerald-50/30">
+                    {c.amount ? Math.round(c.amount).toLocaleString() : '-'}
                   </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono font-medium text-gray-900">
-                    {row.orderAmt.toLocaleString()}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center font-mono text-gray-800">
-                    {row.recvDate}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1.5 py-0.5 text-right font-mono text-gray-800">
-                    {row.minOrderQty}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1.5 py-0.5 text-right font-mono text-gray-800">
-                    {row.unitQty}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1.5 py-0.5 text-right font-mono text-gray-700">
-                    {row.safetyStock.toLocaleString()}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono text-gray-800">
-                    {row.currentStock.toLocaleString()}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1.5 py-0.5 text-center text-gray-700 ">
-                    {row.stockDesc}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono text-gray-700">
-                    {row.incomingScheduled.toLocaleString()}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono font-medium text-gray-900">
-                    {row.totalStockQty.toLocaleString()}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1.5 py-0.5 text-center font-mono text-gray-600 text-[10px]">
-                    {row.lotNo}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1.5 py-0.5 text-left text-gray-600 ">
-                    {row.remark}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center">
-                    <button
-                      type="button"
-                      onClick={() => handleViewProducts(row)}
-                      className="px-1.5 py-0.5 bg-[#4a6b82] hover:bg-[#3b5568] text-white rounded-2xs text-[10px] flex items-center justify-center gap-0.5 mx-auto shadow-2xs"
-                    >
-                      <Eye size={10} />
-                      보기
-                    </button>
-                  </td>
+                  {showWeek && week.map((v, i) => (
+                    <td key={i} className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-600">{v || ''}</td>
+                  ))}
+                  {showWeek && (
+                    <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-500">
+                      {c.dailyBox ? (Math.round(c.dailyBox * 100) / 100) : ''}
+                    </td>
+                  )}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
 
-            {/* 하단 요약 합계 행 (101223.png 일치: 연노랑 배경) */}
             <tfoot className="sticky bottom-0 z-20 bg-[#ffffcc] border-t-2 border-[#9098aa] font-bold text-gray-900 shadow-inner">
               <tr className="h-[25px]">
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1.5 py-1 text-center font-bold">합계</td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-2 py-1"></td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-2 py-1"></td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1 text-right font-mono text-blue-900 font-bold">
-                  {totalQty.toLocaleString()}
-                </td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-2 py-1"></td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-2 py-1 text-right font-mono text-gray-900 font-bold">
-                  {totalAmt.toLocaleString()}
-                </td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-2 py-1"></td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-2 py-1"></td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-2 py-1"></td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
-                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
+                <td colSpan={14} className="border border-[#9098aa] px-2 py-1 text-center">합계</td>
+                <td className="border border-[#9098aa] px-1 py-1 text-right font-mono text-blue-900">{totals.boxes.toLocaleString()}</td>
+                <td className="border border-[#9098aa] px-1 py-1"></td>
+                <td className="border border-[#9098aa] px-2 py-1"></td>
+                <td className="border border-[#9098aa] px-2 py-1 text-right font-mono">{totals.amt ? Math.round(totals.amt).toLocaleString() : ''}</td>
+                {showWeek && weekLabels.map((d) => (
+                  <td key={d} className="border border-[#9098aa] px-1 py-1"></td>
+                ))}
+                {showWeek && <td className="border border-[#9098aa] px-1 py-1"></td>}
               </tr>
             </tfoot>
           </table></EditableTableWrapper>
+          )}
         </div>
       </div>
     </div>
