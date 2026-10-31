@@ -25,6 +25,122 @@ export interface OrderSheetItem {
   bagPrice: number;
 }
 
+export interface BomChildLink {
+  menu: string;
+  normMenu: string;
+  qty: number; // B열 수량 (야채 실주문량으로 보정 전)
+  perUnit: number; // C열 개당소요량
+}
+
+export interface BomMaterial {
+  name: string;
+  norm: string;
+  supplierHeader: string;
+  packUnit: number;
+  bagPrice: number;
+  days: number;
+  menus: BomChildLink[];
+}
+
+const num = (v: unknown): number => {
+  const n = Number(v);
+  return isNaN(n) ? 0 : n;
+};
+
+/** 발주시트 내장 BOM 파싱: 자재행 + 하위 메뉴행(A=메뉴,B=수량,C=개당소요량,E=0) */
+export function parseOrderSheetBom(wb: XLSX.WorkBook): BomMaterial[] {
+  const ws = wb.Sheets['발주시트'];
+  if (!ws) return [];
+  const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+  const mats: BomMaterial[] = [];
+  let cur: BomMaterial | null = null;
+  for (let i = 2; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r) continue;
+    const a = r[0];
+    const b = r[1];
+    const c = r[2];
+    const aStr = a != null ? String(a).trim() : '';
+    const cStr = c != null ? String(c).trim() : '';
+    const isSupplierHeader =
+      aStr.length > 1 && (typeof b === 'string' || b == null) && (c == null || cStr === '' || cStr === 'null');
+    if (isSupplierHeader) {
+      cur = null;
+      continue;
+    }
+    if (cStr !== '' && cStr !== 'null' && (a == null || aStr === '')) {
+      cur = {
+        name: cStr,
+        norm: normName(cStr),
+        supplierHeader: '',
+        packUnit: num(r[4]),
+        bagPrice: num(r[16]),
+        days: num(r[6]),
+        menus: [],
+      };
+      // 직전 공급사 헤더는 별도 추적 없이 supplierHeader 비움 (import에서 정본 vendor 사용)
+      mats.push(cur);
+      continue;
+    }
+    if (cur && num(r[4]) === 0 && aStr !== '') {
+      cur.menus.push({ menu: aStr, normMenu: normName(aStr), qty: num(b), perUnit: num(c) });
+    }
+  }
+  // supplierHeader 복원: 위에서 아래로 전파
+  let lastSupplier = '';
+  const withSupplier: BomMaterial[] = [];
+  let mi = 0;
+  for (let i = 2; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r) continue;
+    const a = r[0];
+    const b = r[1];
+    const c = r[2];
+    const aStr = a != null ? String(a).trim() : '';
+    const cStr = c != null ? String(c).trim() : '';
+    const isSupplierHeader =
+      aStr.length > 1 && (typeof b === 'string' || b == null) && (c == null || cStr === '' || cStr === 'null');
+    if (isSupplierHeader) {
+      lastSupplier = aStr;
+      continue;
+    }
+    if (cStr !== '' && cStr !== 'null' && (a == null || aStr === '')) {
+      if (mi < mats.length) {
+        withSupplier.push({ ...mats[mi], supplierHeader: lastSupplier });
+        mi += 1;
+      }
+    }
+  }
+  return withSupplier.length === mats.length ? withSupplier : mats;
+}
+
+/** GFS식 개수품목 판별 (app.js isPieceOrCountItem 미러) */
+export function isPieceOrCountItem(name: string): boolean {
+  if (!name) return false;
+  const n = String(name).toLowerCase();
+  return /패티|돈까스|돈카츠|까스|카츠|치킨|가라야게|스테이크|함박|너비아니|떡갈비|츠쿠네|산적|소시지|소세지|후랑크|핫도그번|핫바|어묵바|전\b|부추전|옥수수전|계란|란\b|알\b|메추리알|장어|유부|동그랑땡|완자|소포장|김밥김|삼각김|롤김|재래김|도시락김|곱창김|절김|1\/2김|용기|뚜껑|필름|스티커|라벨|바코드|컵|트레이|봉투|내피|외피|바란|간지|감열지|밴드|수축/.test(n) || /\(([0-9]{3,5})\)/.test(n);
+}
+
+/** BOM 투입단위 추론: 개수품목→장/매, 벌크→g */
+export function inferBomUnit(materialName: string): string {
+  if (!isPieceOrCountItem(materialName)) return 'g';
+  const n = materialName;
+  if (/김\b|김\(|김밥김|삼각김|롤김|재래김|도시락김|곱창김|절김|1\/2김|장\b/.test(n)) return '장';
+  return '매';
+}
+
+/** 메뉴명 → 품종 추론 (완성품 kind) */
+export function inferMenuKind(menu: string): string {
+  const n = menu;
+  if (/삼각|무스비/.test(n)) return '주먹밥';
+  if (/김밥/.test(n)) return '김밥';
+  if (/도시락|한상|고추장제육$|제육$/.test(n) && /도시락|한상|찬|반상/.test(n)) return '도시락';
+  if (/도시락/.test(n)) return '도시락';
+  if (/버거|샌드위치/.test(n)) return n.includes('버거') ? '햄버거' : '샌드위치';
+  if (/우동|국수|면|파스타|라멘/.test(n)) return '조리면';
+  return '';
+}
+
 export const AUDIT_SHEETS = ['부자재', '냉장1', '냉장2', '냉동', '상온'] as const;
 
 /** 품명 정규화: [접두어]/괄호/기호 제거 + 소문자 */

@@ -76,8 +76,9 @@ export const BomNormalView: React.FC = () => {
   const [versionsMap, setVersionsMap] = useState<Record<number, string[]>>({});
   const [version, setVersion] = useState<string>('1.0');
   const [copySourceId, setCopySourceId] = useState<string>('');
+  const [isImporting, setIsImporting] = useState(false);
 
-  useEffect(() => {
+  const loadBom = () => {
     fetch('/api/master/bom')
       .then((res) => res.json())
       .then((json) => {
@@ -144,7 +145,57 @@ export const BomNormalView: React.FC = () => {
         }
       })
       .catch((err) => console.error('Failed to load BOM', err));
+  };
+
+  useEffect(() => {
+    loadBom();
   }, []);
+
+  // BOM 일괄적재: 미리보기 → 확인 → 실행
+  const handleBulkImport = async () => {
+    setIsImporting(true);
+    try {
+      const prevRes = await fetch('/api/master/bom-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dryRun: true }),
+      });
+      const prevJson = await prevRes.json();
+      if (!prevJson.success) {
+        alert('미리보기 실패: ' + (prevJson.error || '알 수 없는 오류'));
+        return;
+      }
+      const d = prevJson.data;
+      const ok = window.confirm(
+        `발주서 정본 BOM 일괄적재 미리보기\n\n` +
+          `자재 ${d.materialCount}종 · 메뉴 ${d.menuCount}종 · 연결 ${d.linkCount}건\n` +
+          `신규 자재 ${d.newMaterials}종 / 신규 메뉴 ${d.newMenus}종\n` +
+          `신규 예시: ${(d.sampleNewMaterials || []).slice(0, 3).join(', ')}\n\n` +
+          `실행하면 없는 품목·거래처를 자동생성하고 BOM v1.0을 적재(덮어쓰기)합니다.\n진행할까요?`
+      );
+      if (!ok) return;
+      const exeRes = await fetch('/api/master/bom-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dryRun: false }),
+      });
+      const exeJson = await exeRes.json();
+      if (exeJson.success) {
+        const r = exeJson.data;
+        alert(
+          `BOM 일괄적재 완료\n메뉴 ${r.menuCount}종 · 품목생성 ${r.createdProducts}건 · 거래처 ${r.createdPartners}건 · BOM상세 ${r.createdDetails}건` +
+            (r.errors?.length ? `\n실패 ${r.errors.length}건: ${r.errors.slice(0, 3).join(' / ')}` : '')
+        );
+        loadBom();
+      } else {
+        alert('적재 실패: ' + (exeJson.error || '알 수 없는 오류'));
+      }
+    } catch (err: any) {
+      alert('일괄적재 중 오류: ' + err.message);
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   const toApiDetails = (children: BomChildMaterial[]) =>
     children.map((c) => ({
@@ -402,7 +453,7 @@ export const BomNormalView: React.FC = () => {
           { key: 'search', label: '조회', icon: 'search', onClick: () => alert('BOM 조회 완료') },
           { key: 'save', label: '저장', icon: 'save', onClick: handleSave },
           { key: 'reset', label: '초기화', icon: 'reset', onClick: () => alert('초기화 완료') },
-          { key: 'upload', label: '엑셀업로드', icon: 'upload', onClick: () => alert('BOM 엑셀 업로드 양식을 선택하세요.') },
+          { key: 'upload', label: isImporting ? '적재 중...' : 'BOM 일괄적재', icon: 'upload', onClick: handleBulkImport },
           {
             key: 'download',
             label: '엑셀다운로드',
