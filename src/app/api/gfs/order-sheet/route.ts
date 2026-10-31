@@ -27,6 +27,7 @@ export async function GET() {
         incoming: o.incoming,
         currentStock: o.currentStock,
         bagPrice: o.bagPrice || ref?.bagPrice || 0,
+        stockDays: o.stockDays,
         warehouse: ref?.warehouse || '',
         vendor: ref?.vendor || '',
         itemId: ref?.itemId || '',

@@ -23,6 +23,7 @@ export interface OrderSheetItem {
   incoming: number;
   currentStock: number;
   bagPrice: number;
+  stockDays: number | null; // N열 재고유지일 (엑셀 보이는 숫자 그대로, 없으면 null)
 }
 
 export interface BomChildLink {
@@ -229,6 +230,7 @@ export function parseOrderSheet(wb: XLSX.WorkBook): { items: OrderSheetItem[]; s
     const name = r[2];
     const boxes = r[3];
     if (name && String(name).trim().length > 1) {
+      const nVal = Number(r[13]);
       items.push({
           name: String(name).trim(),
           norm: normName(name),
@@ -240,6 +242,7 @@ export function parseOrderSheet(wb: XLSX.WorkBook): { items: OrderSheetItem[]; s
           incoming: Number(r[8]) || 0,
           currentStock: Number(r[9]) || 0,
           bagPrice: Number(r[16]) || 0,
+          stockDays: isNaN(nVal) ? null : nVal,
       });
     }
   }
