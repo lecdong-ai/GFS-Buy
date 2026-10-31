@@ -45,15 +45,16 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
-    const updates: Array<{
-      id: number;
-      currentQty?: number;
-      unitPrice?: number;
-      stockAmount?: number;
-      warehouse?: string;
-      safetyStock?: number;
-      productId?: number;
-    }> = body.updates || (body.id ? [body] : []);
+  const updates: Array<{
+    id: number;
+    currentQty?: number;
+    unitPrice?: number;
+    stockAmount?: number;
+    warehouse?: string;
+    safetyStock?: number;
+    expiryDate?: string;
+    productId?: number;
+  }> = body.updates || (body.id ? [body] : []);
 
     if (!updates || updates.length === 0) {
       return NextResponse.json(
@@ -73,6 +74,7 @@ export async function PUT(req: NextRequest) {
           data.stockAmount = Number(item.currentQty) * Number(item.unitPrice);
         }
         if (item.warehouse !== undefined) data.warehouse = String(item.warehouse);
+        if (item.expiryDate !== undefined) data.expiryDate = String(item.expiryDate);
 
         return prisma.inventory.update({
           where: { id: Number(item.id) },

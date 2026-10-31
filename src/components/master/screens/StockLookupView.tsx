@@ -16,6 +16,13 @@ interface StockItem {
   itemName: string;
   spec: string;
   unit: string;
+  inboundDate: string; // 입고일 (D+2 등)
+  expiryDate: string; // 유통기한
+  orderDay: string; // 발주일
+  dailyUsage: number; // 일사용량(박스)
+  packUnit: number; // 입수량
+  boxQty: number; // 박스
+  pieceQty: number; // 낱개(봉)
   prevStock: number;
   inQty: number;
   outQty: number;
@@ -40,6 +47,13 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemName: '신동진 햅쌀 (1등급)',
     spec: '20kg/포',
     unit: 'kg',
+    inboundDate: 'D+1',
+    expiryDate: '2027-04-30',
+    orderDay: '월수금',
+    dailyUsage: 6.5,
+    packUnit: 20,
+    boxQty: 167,
+    pieceQty: 10,
     prevStock: 3200,
     inQty: 1000,
     outQty: 850,
@@ -59,6 +73,13 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemName: '오뚜기 골드마요네즈',
     spec: '3.2kg/통',
     unit: 'kg',
+    inboundDate: 'D+2',
+    expiryDate: '2027-02-28',
+    orderDay: '월수금',
+    dailyUsage: 3.2,
+    packUnit: 10,
+    boxQty: 45,
+    pieceQty: 0,
     prevStock: 480,
     inQty: 120,
     outQty: 150,
@@ -78,6 +99,13 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemName: '동원 참치통조림 살코기',
     spec: '1.88kg/캔',
     unit: 'kg',
+    inboundDate: 'D+2',
+    expiryDate: '2027-10-15',
+    orderDay: '화목토',
+    dailyUsage: 1.8,
+    packUnit: 6,
+    boxQty: 13,
+    pieceQty: 2,
     prevStock: 240,
     inQty: 100,
     outQty: 260,
@@ -97,6 +125,13 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemName: '삼각김밥용 조미김',
     spec: '1000매/속',
     unit: '매',
+    inboundDate: 'D+2',
+    expiryDate: '2027-06-30',
+    orderDay: '월수금',
+    dailyUsage: 12.5,
+    packUnit: 1000,
+    boxQty: 37,
+    pieceQty: 0,
     prevStock: 45000,
     inQty: 20000,
     outQty: 28000,
@@ -116,6 +151,13 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemName: '삼각김밥 삼면포장필름',
     spec: '5000m/roll',
     unit: 'roll',
+    inboundDate: 'D+2',
+    expiryDate: '2028-01-31',
+    orderDay: '월수금',
+    dailyUsage: 0.4,
+    packUnit: 1,
+    boxQty: 33,
+    pieceQty: 0,
     prevStock: 35,
     inQty: 10,
     outQty: 12,
@@ -135,6 +177,13 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemName: '11찬도시락 2단 트레이',
     spec: '400ea/box',
     unit: 'ea',
+    inboundDate: 'D+2',
+    expiryDate: '2028-06-30',
+    orderDay: '월수금',
+    dailyUsage: 2.1,
+    packUnit: 400,
+    boxQty: 3,
+    pieceQty: 200,
     prevStock: 2800,
     inQty: 0,
     outQty: 1400,
@@ -154,6 +203,13 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemName: '국내산 돈육 전지 (슬라이스)',
     spec: '10kg/box',
     unit: 'kg',
+    inboundDate: 'D+1',
+    expiryDate: '2026-11-20',
+    orderDay: '화목토',
+    dailyUsage: 8.2,
+    packUnit: 10,
+    boxQty: 93,
+    pieceQty: 0,
     prevStock: 850,
     inQty: 500,
     outQty: 420,
@@ -173,6 +229,13 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemName: 'CJ 델리햄 슬라이스',
     spec: '1kg/pack',
     unit: 'kg',
+    inboundDate: 'D+1',
+    expiryDate: '2026-11-25',
+    orderDay: '화목토',
+    dailyUsage: 4.4,
+    packUnit: 10,
+    boxQty: 6,
+    pieceQty: 0,
     prevStock: 180,
     inQty: 100,
     outQty: 220,
@@ -192,6 +255,13 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemName: '세척 당근채 (신선편의)',
     spec: '5kg/bag',
     unit: 'kg',
+    inboundDate: 'D+1',
+    expiryDate: '2026-11-02',
+    orderDay: '화목토',
+    dailyUsage: 5.1,
+    packUnit: 5,
+    boxQty: 36,
+    pieceQty: 0,
     prevStock: 210,
     inQty: 150,
     outQty: 180,
@@ -211,6 +281,13 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemName: '양상추 (탈수완료)',
     spec: '5kg/bag',
     unit: 'kg',
+    inboundDate: 'D+1',
+    expiryDate: '2026-11-02',
+    orderDay: '화목토',
+    dailyUsage: 3.8,
+    packUnit: 5,
+    boxQty: 10,
+    pieceQty: 0,
     prevStock: 90,
     inQty: 80,
     outQty: 120,
@@ -230,6 +307,13 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemName: '숯불바비큐 패티 (80g)',
     spec: '8kg/box',
     unit: 'kg',
+    inboundDate: 'D+2',
+    expiryDate: '2027-10-10',
+    orderDay: '월수금',
+    dailyUsage: 6.3,
+    packUnit: 8,
+    boxQty: 80,
+    pieceQty: 0,
     prevStock: 620,
     inQty: 300,
     outQty: 280,
@@ -249,6 +333,13 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemName: '케이준 치킨텐더 (가공)',
     spec: '5kg/box',
     unit: 'kg',
+    inboundDate: 'D+2',
+    expiryDate: '2027-09-30',
+    orderDay: '월수금',
+    dailyUsage: 2.7,
+    packUnit: 5,
+    boxQty: 52,
+    pieceQty: 0,
     prevStock: 410,
     inQty: 0,
     outQty: 150,
@@ -268,6 +359,13 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemName: '참치마요삼각김밥',
     spec: '110g',
     unit: 'ea',
+    inboundDate: 'D+1',
+    expiryDate: '2026-11-01',
+    orderDay: '매일',
+    dailyUsage: 120,
+    packUnit: 1,
+    boxQty: 1800,
+    pieceQty: 0,
     prevStock: 1200,
     inQty: 5400,
     outQty: 4800,
@@ -287,6 +385,13 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemName: '11가지찬도시락',
     spec: '430g',
     unit: 'ea',
+    inboundDate: 'D+1',
+    expiryDate: '2026-11-01',
+    orderDay: '매일',
+    dailyUsage: 45,
+    packUnit: 1,
+    boxQty: 550,
+    pieceQty: 0,
     prevStock: 450,
     inQty: 2200,
     outQty: 2100,
@@ -318,6 +423,9 @@ export const StockLookupView: React.FC = () => {
             const safety = inv.product?.safetyStockQty || 100;
             const current = inv.currentQty || 0;
             const price = inv.unitPrice || (inv.currentQty > 0 ? inv.stockAmount / inv.currentQty : 2000);
+            const pack = inv.product?.boxQty || 1;
+            const box = Math.floor(current / pack);
+            const piece = Math.round((current % pack) * 10) / 10;
             return {
               id: inv.id || idx + 1,
               whName: inv.warehouse || '상온',
@@ -328,6 +436,13 @@ export const StockLookupView: React.FC = () => {
               itemName: inv.productName || inv.product?.name || '',
               spec: inv.product?.spec || '',
               unit: inv.unit || inv.product?.unit || 'kg',
+              inboundDate: inv.lastInDate ? String(inv.lastInDate).slice(5) : inv.product?.partner?.leadTime ? `D+${inv.product.partner.leadTime}` : 'D+2',
+              expiryDate: inv.expiryDate || '',
+              orderDay: inv.product?.partner?.orderDay || '',
+              dailyUsage: 0,
+              packUnit: pack,
+              boxQty: box,
+              pieceQty: piece,
               prevStock: current,
               inQty: 0,
               outQty: 0,
@@ -370,6 +485,14 @@ export const StockLookupView: React.FC = () => {
 
         const updated: StockItem = { ...item, [columnKey]: newValue };
 
+        // 박스/낱개/입수량 수정 시 현재고 연동 계산 (엑셀 수식: 박스×입수+낱개)
+        if (columnKey === 'boxQty' || columnKey === 'pieceQty' || columnKey === 'packUnit') {
+          const box = Number(columnKey === 'boxQty' ? newValue : updated.boxQty) || 0;
+          const piece = Number(columnKey === 'pieceQty' ? newValue : updated.pieceQty) || 0;
+          const pack = Number(columnKey === 'packUnit' ? newValue : updated.packUnit) || 0;
+          updated.currentStock = box * pack + piece;
+        }
+
         // 이월재고, 입출고 수정 시 현재고 연동 계산
         const prevStock = Number(columnKey === 'prevStock' ? newValue : updated.prevStock) || 0;
         const inQty = Number(columnKey === 'inQty' ? newValue : updated.inQty) || 0;
@@ -411,6 +534,7 @@ export const StockLookupView: React.FC = () => {
           unitPrice: d.unitPrice,
           stockAmount: d.totalAmount,
           safetyStock: d.safetyStock,
+          expiryDate: d.expiryDate,
         }));
 
       const res = await fetch('/api/inventory/stock', {
@@ -548,6 +672,60 @@ export const StockLookupView: React.FC = () => {
       key: 'unit',
       label: '단위',
       width: '60px',
+      align: 'center',
+      editable: false,
+    },
+    {
+      key: 'inboundDate',
+      label: '입고일',
+      width: '70px',
+      align: 'center',
+      editable: false,
+    },
+    {
+      key: 'dailyUsage',
+      label: '일사용량',
+      width: '85px',
+      align: 'right',
+      format: 'number',
+      editable: false,
+    },
+    {
+      key: 'expiryDate',
+      label: '유통기한',
+      width: '95px',
+      align: 'center',
+      format: 'date',
+      editable: true,
+    },
+    {
+      key: 'packUnit',
+      label: '입수량',
+      width: '70px',
+      align: 'right',
+      format: 'number',
+      editable: false,
+    },
+    {
+      key: 'boxQty',
+      label: '박스',
+      width: '75px',
+      align: 'right',
+      format: 'number',
+      editable: true,
+    },
+    {
+      key: 'pieceQty',
+      label: '낱개',
+      width: '75px',
+      align: 'right',
+      format: 'number',
+      editable: true,
+    },
+    {
+      key: 'orderDay',
+      label: '발주일',
+      width: '80px',
       align: 'center',
       editable: false,
     },
