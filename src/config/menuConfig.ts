@@ -41,6 +41,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       { id: 'pur-mat-req-print', title: '자재소요량출력(GSR)', categoryId: 'purchase', categoryName: '매입관리' },
       { id: 'pur-order-req-confirm', title: '발주소요량확정', categoryId: 'purchase', categoryName: '매입관리' },
       { id: 'pur-mat-order-day', title: '자재발주(요일별)', categoryId: 'purchase', categoryName: '매입관리' },
+      { id: 'pur-gfs-smart-order', title: '스마트발주(GFS)', categoryId: 'purchase', categoryName: '매입관리', badge: 'GFS' },
       { id: 'pur-mat-order-normal', title: '자재발주(일반)', categoryId: 'purchase', categoryName: '매입관리' },
       { id: 'pur-mat-order-simul', title: '자재발주(시뮬)', categoryId: 'purchase', categoryName: '매입관리' },
       { id: 'pur-order-status-edit', title: '발주현황/수정', categoryId: 'purchase', categoryName: '매입관리' },
