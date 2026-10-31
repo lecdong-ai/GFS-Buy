@@ -519,6 +519,9 @@ export const StockLookupView: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // 빨간펜: 업로드 시 이상행(급변·신규) 목록 — 사람은 보고 판단, 저장은 직접
+  const [reviewList, setReviewList] = useState<{ id: number; name: string; kind: string; oldQty: number; curQty: number }[]>([]);
+  const [reviewOpen, setReviewOpen] = useState(false);
   // 자동채움 잠금: 엑셀이 채운 셀은 기본 잠금, 수정모드에서만 편집 가능
   // 잠금 대상: 창고명·유통기한·박스·낱개·현재고·단가 / 항상편집: 이월·입고·출고·안전재고
   const [locked, setLocked] = useState(true);
@@ -754,10 +757,12 @@ export const StockLookupView: React.FC = () => {
       });
       const dirtyIds = new Set<number>(dirtyRowIds);
       const freshIds = new Set<number>(newRowIds);
+      const review: { id: number; name: string; kind: string; oldQty: number; curQty: number }[] = [];
       let added = 0;
       let updated = 0;
       let same = 0;
       let autoFilled = 0;
+      let parsed = 0;
       let tempId = -(Date.now() % 1000000) - 1;
       for (const sheet of AUDIT_SHEETS) {
         const ws = wb.Sheets[sheet];
@@ -784,6 +789,7 @@ export const StockLookupView: React.FC = () => {
           // 안전재고 자동계산 (신규·0인 것만, 기존 수기값 유지)
           const autoSafety = calcSafetyStock(daily, pack, parseLeadDays(inbound));
           if (exist) {
+            const oldStock = exist.currentStock;
             const newSafety = (!exist.safetyStock || exist.safetyStock <= 0) && autoSafety > 0 ? autoSafety : exist.safetyStock;
             // 유지일: 발주서 정본 스냅샷 고정
             const oRef = orderByNorm.get(norm);
@@ -818,6 +824,10 @@ export const StockLookupView: React.FC = () => {
             exist.exI = nxI;
             exist.exH = nxH;
             exist.stockDays = calcStockDays(nxJ, nxI, nxH);
+            // 빨간펜: 기존 대비 ±50% 이상 급변 행 표시
+            if (oldStock > 0 && Math.abs(current - oldStock) / oldStock >= 0.5) {
+              review.push({ id: exist.id, name: exist.itemName, kind: current > oldStock ? '급증' : '급감', oldQty: oldStock, curQty: current });
+            }
             if (changed) {
               updated += 1;
               if (autoSafety > 0) autoFilled += 1;
@@ -868,14 +878,24 @@ export const StockLookupView: React.FC = () => {
             freshIds.add(row.id);
             dirtyIds.add(row.id);
             added += 1;
+            if (current > 0) {
+              review.push({ id: row.id, name, kind: '신규', oldQty: 0, curQty: current });
+            }
           }
+          parsed += 1;
         }
+      }
+      if (parsed === 0) {
+        alert('엑셀에서 품목 행을 찾지 못했습니다. 일일 재고조사표 양식인지 확인하세요.');
+        return;
       }
       setData(next);
       setDirtyRowIds(dirtyIds);
       setNewRowIds(freshIds);
+      setReviewList(review);
+      setReviewOpen(review.length > 0);
       setTargetDate(new Date().toISOString().slice(0, 10));
-      alert(`업로드 반영 완료: 신규 ${added}건 · 변경 ${updated}건 · 동일 ${same}건 · 안전재고 자동계산 ${autoFilled}건\n확인 후 저장(Ctrl+S)하세요. 신규는 저장 시 품목 자동생성됩니다.`);
+      alert(`업로드 반영 완료: 신규 ${added}건 · 변경 ${updated}건 · 동일 ${same}건 · 안전재고 자동계산 ${autoFilled}건 · 확인필요 ${review.length}건\n확인 후 저장(Ctrl+S)하세요. 신규는 저장 시 품목 자동생성됩니다.`);
       setLocked(true);
     } catch (e: any) {
       alert('엑셀 파싱 실패: ' + (e.message || '알 수 없는 오류'));
@@ -1541,6 +1561,47 @@ export const StockLookupView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* 2-1. 빨간펜 확인필요 패널 (담당자 판단용, 클릭하면 해당 행으로 이동) */}
+      {reviewOpen && reviewList.length > 0 && (
+        <div className="bg-red-50 border-b border-red-300 px-3 py-1.5 shrink-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-red-800 text-[12px]">
+              확인필요 {reviewList.length}건
+            </span>
+            <span className="text-[11px] text-red-600">클릭하면 해당 품목으로 이동 · 확인 후 저장하세요</span>
+            <button
+              type="button"
+              onClick={() => setReviewOpen(false)}
+              className="ml-auto px-2 py-0.5 bg-white border border-gray-400 rounded text-[11px] hover:bg-gray-100"
+            >
+              닫기
+            </button>
+          </div>
+          <div className="mt-1 flex gap-1.5 flex-wrap max-h-[76px] overflow-auto">
+            {reviewList.map((rv) => (
+              <button
+                key={`${rv.kind}-${rv.id}`}
+                type="button"
+                onClick={() => {
+                  setKeyword(rv.name);
+                  setSelectedRowId(rv.id);
+                }}
+                title="클릭하면 해당 품목만 표시"
+                className="px-2 py-0.5 bg-white border border-red-300 rounded text-[11px] hover:bg-red-100 text-left"
+              >
+                <span className={`font-bold ${rv.kind === '신규' ? 'text-emerald-700' : 'text-red-700'}`}>
+                  [{rv.kind}]
+                </span>{' '}
+                <span className="text-gray-800">{rv.name}</span>{' '}
+                <span className="font-mono text-gray-600">
+                  {rv.oldQty.toLocaleString()} → {rv.curQty.toLocaleString()}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 3. Main Grid */}
       <div className="flex-1 p-2 bg-[#d8dde5] overflow-hidden flex flex-col">
