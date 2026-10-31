@@ -57,8 +57,27 @@ interface StockItem {
   currentStock: number;
   safetyStock: number;
   shortage: number; // currentStock - safetyStock (negative = danger)
+  status: string; // 품절/부족/과잉/정상
   unitPrice: number;
   totalAmount: number; // currentStock * unitPrice
+}
+
+/** 재고상태 판정: 품절(0) / 부족(안전미달) / 과잉(3배 이상) / 정상 */
+export function calcStockStatus(current: number, safety: number): string {
+  if (!(current > 0)) return '품절';
+  if (current < safety) return '부족';
+  if (safety > 0 && current >= safety * 3) return '과잉';
+  return '정상';
+}
+
+/** 유통기한 임박일수 (YYYY-MM-DD만 판정, 파싱불가 -1) */
+export function expiryInDays(expiry: string, base: string): number {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec((expiry || '').trim());
+  if (!m) return -1;
+  const t = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`).getTime();
+  const b = new Date(`${base}T00:00:00`).getTime();
+  if (isNaN(t) || isNaN(b)) return -1;
+  return Math.floor((t - b) / 86400000);
 }
 
 const WAREHOUSES = ['냉장1', '냉장2', '냉동', '상온', '부자재'];
@@ -87,7 +106,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     outQty: 850,
     currentStock: 3350,
     safetyStock: 2000,
-    shortage: 1350,
+    status: '정상',
+        shortage: 1350,
     unitPrice: 2850,
     totalAmount: 9547500,
   },
@@ -113,7 +133,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     outQty: 150,
     currentStock: 450,
     safetyStock: 300,
-    shortage: 150,
+    status: '정상',
+        shortage: 150,
     unitPrice: 4200,
     totalAmount: 1890000,
   },
@@ -139,7 +160,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     outQty: 260,
     currentStock: 80,
     safetyStock: 150,
-    shortage: -70, // 부족!
+    status: '부족',
+        shortage: -70, // 부족!
     unitPrice: 11500,
     totalAmount: 920000,
   },
@@ -165,7 +187,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     outQty: 28000,
     currentStock: 37000,
     safetyStock: 20000,
-    shortage: 17000,
+    status: '정상',
+        shortage: 17000,
     unitPrice: 48,
     totalAmount: 1776000,
   },
@@ -191,7 +214,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     outQty: 12,
     currentStock: 33,
     safetyStock: 20,
-    shortage: 13,
+    status: '정상',
+        shortage: 13,
     unitPrice: 85000,
     totalAmount: 2805000,
   },
@@ -217,7 +241,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     outQty: 1400,
     currentStock: 1400,
     safetyStock: 2000,
-    shortage: -600, // 부족!
+    status: '부족',
+        shortage: -600, // 부족!
     unitPrice: 380,
     totalAmount: 532000,
   },
@@ -243,7 +268,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     outQty: 420,
     currentStock: 930,
     safetyStock: 500,
-    shortage: 430,
+    status: '정상',
+        shortage: 430,
     unitPrice: 8900,
     totalAmount: 8277000,
   },
@@ -269,7 +295,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     outQty: 220,
     currentStock: 60,
     safetyStock: 120,
-    shortage: -60, // 부족!
+    status: '부족',
+        shortage: -60, // 부족!
     unitPrice: 12800,
     totalAmount: 768000,
   },
@@ -295,7 +322,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     outQty: 180,
     currentStock: 180,
     safetyStock: 100,
-    shortage: 80,
+    status: '정상',
+        shortage: 80,
     unitPrice: 4100,
     totalAmount: 738000,
   },
@@ -321,7 +349,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     outQty: 120,
     currentStock: 50,
     safetyStock: 60,
-    shortage: -10, // 부족!
+    status: '부족',
+        shortage: -10, // 부족!
     unitPrice: 5300,
     totalAmount: 265000,
   },
@@ -347,7 +376,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     outQty: 280,
     currentStock: 640,
     safetyStock: 400,
-    shortage: 240,
+    status: '정상',
+        shortage: 240,
     unitPrice: 9700,
     totalAmount: 6208000,
   },
@@ -373,7 +403,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     outQty: 150,
     currentStock: 260,
     safetyStock: 300,
-    shortage: -40, // 부족!
+    status: '부족',
+        shortage: -40, // 부족!
     unitPrice: 10500,
     totalAmount: 2730000,
   },
@@ -399,7 +430,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     outQty: 4800,
     currentStock: 1800,
     safetyStock: 800,
-    shortage: 1000,
+    status: '정상',
+        shortage: 1000,
     unitPrice: 650,
     totalAmount: 1170000,
   },
@@ -425,7 +457,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     outQty: 2100,
     currentStock: 550,
     safetyStock: 300,
-    shortage: 250,
+    status: '정상',
+        shortage: 250,
     unitPrice: 2800,
     totalAmount: 1540000,
   },
@@ -436,6 +469,10 @@ export const StockLookupView: React.FC = () => {
   const [targetDate, setTargetDate] = useState('2026-10-30');
   const [selectedWh, setSelectedWh] = useState('전체');
   const [selectedType, setSelectedType] = useState('전체');
+  const [selectedSupplier, setSelectedSupplier] = useState('전체');
+  const [selectedVendor, setSelectedVendor] = useState('전체');
+  const [selectedStatus, setSelectedStatus] = useState('전체');
+  const [selectedExpiry, setSelectedExpiry] = useState('전체');
   const [onlyShortage, setOnlyShortage] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [selectedRowId, setSelectedRowId] = useState<number | null>(null);
@@ -506,6 +543,7 @@ export const StockLookupView: React.FC = () => {
               currentStock: current,
               safetyStock: safety,
               shortage: current - safety,
+              status: calcStockStatus(current, safety),
               unitPrice: uprice,
               totalAmount: current * uprice,
             });
@@ -549,6 +587,7 @@ export const StockLookupView: React.FC = () => {
                 currentStock: current,
                 safetyStock: autoSafety,
                 shortage: current - autoSafety,
+                status: calcStockStatus(current, autoSafety),
                 unitPrice: price,
                 totalAmount: current * price,
               };
@@ -619,6 +658,7 @@ export const StockLookupView: React.FC = () => {
 
         // 과부족 및 재고금액 실시간 자동 계산
         updated.shortage = currentStock - safetyStock;
+        updated.status = calcStockStatus(currentStock, safetyStock);
         updated.totalAmount = currentStock * unitPrice;
 
         return updated;
@@ -700,6 +740,7 @@ export const StockLookupView: React.FC = () => {
             exist.totalAmount = current * exist.unitPrice;
             exist.safetyStock = newSafety;
             exist.shortage = current - newSafety;
+            exist.status = calcStockStatus(current, newSafety);
             if (changed) {
               updated += 1;
               if (autoSafety > 0) autoFilled += 1;
@@ -735,9 +776,10 @@ export const StockLookupView: React.FC = () => {
                 currentStock: current,
                 safetyStock: newSafety,
                 shortage: current - newSafety,
-              unitPrice: price,
-              totalAmount: current * price,
-            };
+                status: calcStockStatus(current, newSafety),
+                unitPrice: price,
+                totalAmount: current * price,
+              };
             next.push(row);
             nextByNorm.set(norm, row);
             freshIds.add(row.id);
@@ -864,10 +906,32 @@ export const StockLookupView: React.FC = () => {
   };
 
   // Filtered rows
+  const suppliers = useMemo(() => {
+    const s = new Set<string>();
+    data.forEach((d) => { if (d.orderSupplier) s.add(d.orderSupplier); });
+    return [...s].sort((a, b) => a.localeCompare(b, 'ko'));
+  }, [data]);
+
+  const vendors = useMemo(() => {
+    const s = new Set<string>();
+    data.forEach((d) => { if (d.vendor) s.add(d.vendor); });
+    return [...s].sort((a, b) => a.localeCompare(b, 'ko'));
+  }, [data]);
+
   const filteredData = useMemo(() => {
     return data.filter((item) => {
       if (selectedWh !== '전체' && item.whName !== selectedWh) return false;
       if (selectedType !== '전체' && item.itemType !== selectedType) return false;
+      if (selectedSupplier !== '전체' && item.orderSupplier !== selectedSupplier) return false;
+      if (selectedVendor !== '전체' && item.vendor !== selectedVendor) return false;
+      if (selectedStatus !== '전체' && item.status !== selectedStatus) return false;
+      if (selectedExpiry !== '전체') {
+        const dd = expiryInDays(item.expiryDate, targetDate);
+        if (dd < 0) return false;
+        if (selectedExpiry === '만료' && dd >= 0) return false;
+        if (selectedExpiry === 'D-7' && !(dd >= 0 && dd <= 7)) return false;
+        if (selectedExpiry === 'D-30' && !(dd >= 0 && dd <= 30)) return false;
+      }
       if (onlyShortage && item.shortage >= 0) return false;
       if (keyword.trim()) {
         const kw = keyword.trim().toLowerCase();
@@ -880,7 +944,7 @@ export const StockLookupView: React.FC = () => {
       }
       return true;
     });
-  }, [data, selectedWh, selectedType, onlyShortage, keyword]);
+  }, [data, selectedWh, selectedType, selectedSupplier, selectedVendor, selectedStatus, selectedExpiry, targetDate, onlyShortage, keyword]);
 
   // Summaries
   const summaries = useMemo(() => {
@@ -1107,6 +1171,31 @@ export const StockLookupView: React.FC = () => {
       ),
     },
     {
+      key: 'status',
+      label: '상태',
+      width: '65px',
+      align: 'center',
+      sortable: true,
+      filterable: true,
+      editable: false,
+      render: (v) => {
+        const s = String(v || '정상');
+        const cls =
+          s === '품절'
+            ? 'bg-gray-800 text-white border-gray-800'
+            : s === '부족'
+            ? 'bg-red-100 text-red-700 border-red-300'
+            : s === '과잉'
+            ? 'bg-amber-100 text-amber-800 border-amber-300'
+            : 'bg-emerald-50 text-emerald-700 border-emerald-300';
+        return (
+          <span className={`inline-block px-1.5 py-0.2 text-[11px] font-bold border rounded ${cls}`}>
+            {s}
+          </span>
+        );
+      },
+    },
+    {
       key: 'unitPrice',
       label: '단가',
       width: '90px',
@@ -1230,6 +1319,72 @@ export const StockLookupView: React.FC = () => {
             </select>
           </div>
 
+          {/* Supplier (발주처) */}
+          <div className="flex items-center gap-1.5 ml-2">
+            <span className="font-semibold text-gray-700">발주처</span>
+            <select
+              value={selectedSupplier}
+              onChange={(e) => setSelectedSupplier(e.target.value)}
+              className="bg-white border border-gray-400 rounded px-2 py-0.5 text-[12px] max-w-[180px]"
+            >
+              <option value="전체">전체</option>
+              {suppliers.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Vendor (제조사) */}
+          <div className="flex items-center gap-1.5 ml-2">
+            <span className="font-semibold text-gray-700">거래처</span>
+            <select
+              value={selectedVendor}
+              onChange={(e) => setSelectedVendor(e.target.value)}
+              className="bg-white border border-gray-400 rounded px-2 py-0.5 text-[12px] max-w-[160px]"
+            >
+              <option value="전체">전체</option>
+              {vendors.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Stock Status */}
+          <div className="flex items-center gap-1.5 ml-2">
+            <span className="font-semibold text-gray-700">재고상태</span>
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="bg-white border border-gray-400 rounded px-2 py-0.5 text-[12px]"
+            >
+              {['전체', '정상', '부족', '과잉', '품절'].map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Expiry */}
+          <div className="flex items-center gap-1.5 ml-2">
+            <span className="font-semibold text-gray-700">유통기한</span>
+            <select
+              value={selectedExpiry}
+              onChange={(e) => setSelectedExpiry(e.target.value)}
+              className="bg-white border border-gray-400 rounded px-2 py-0.5 text-[12px]"
+            >
+              {['전체', '만료', 'D-7', 'D-30'].map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Search keyword */}
           <div className="flex items-center gap-1.5 ml-2">
             <div className="relative">
@@ -1271,6 +1426,10 @@ export const StockLookupView: React.FC = () => {
               setKeyword('');
               setSelectedWh('전체');
               setSelectedType('전체');
+              setSelectedSupplier('전체');
+              setSelectedVendor('전체');
+              setSelectedStatus('전체');
+              setSelectedExpiry('전체');
               setOnlyShortage(false);
             }}
             title="새로고침"
