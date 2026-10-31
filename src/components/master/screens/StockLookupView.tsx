@@ -590,6 +590,62 @@ export const StockLookupView: React.FC = () => {
   // 자동채움 잠금: 엑셀이 채운 셀은 기본 잠금, 수정모드에서만 편집 가능
   // 잠금 대상: 창고명·유통기한·박스·낱개·현재고·단가 / 항상편집: 이월·입고·출고·안전재고
   const [locked, setLocked] = useState(true);
+  // 소진 시뮬레이터: 선택 행 품목의 LOT 순차 차감 미리보기 (DB 반영 없음)
+  const [simOpen, setSimOpen] = useState(false);
+  const [simQty, setSimQty] = useState('');
+  const [simResult, setSimResult] = useState<{
+    itemName: string;
+    whName: string;
+    lines: { lotNo: string; inbound: string; expiry: string; cur: number; take: number; remain: number }[];
+    totalTake: number;
+    shortage: number;
+    fromExpiry: string;
+    toExpiry: string;
+  } | null>(null);
+
+  const runSimulation = () => {
+    const qty = Math.floor(Number(simQty) || 0);
+    if (qty <= 0) {
+      alert('사용수량(봉)을 입력하세요.');
+      return;
+    }
+    const sel = data.find((d) => d.id === selectedRowId);
+    if (!sel) {
+      alert('표에서 품목을 먼저 클릭하세요.');
+      return;
+    }
+    const key = `${normName(sel.itemName)}||${sel.whName}`;
+    const group = data
+      .filter((d) => `${normName(d.itemName)}||${d.whName}` === key && d.currentStock > 0)
+      .sort((a, b) => (a.burnRank || 999) - (b.burnRank || 999));
+    if (group.length === 0) {
+      alert('소진 가능한 재고가 없습니다.');
+      return;
+    }
+    let left = qty;
+    const lines = group.map((g) => {
+      const take = Math.min(left, g.currentStock);
+      left -= take;
+      return {
+        lotNo: g.lotNo || '-',
+        inbound: g.inboundDate || '-',
+        expiry: g.expiryDate || '-',
+        cur: g.currentStock,
+        take,
+        remain: g.currentStock - take,
+      };
+    });
+    const used = lines.filter((l) => l.take > 0);
+    setSimResult({
+      itemName: sel.itemName,
+      whName: sel.whName,
+      lines,
+      totalTake: qty - left,
+      shortage: left,
+      fromExpiry: used.length > 0 ? used[0].expiry : '-',
+      toExpiry: used.length > 1 ? used[used.length - 1].expiry : used.length === 1 ? used[0].expiry : '-',
+    });
+  };
 
   const [mergeInfo, setMergeInfo] = useState('');
 
@@ -1467,6 +1523,20 @@ export const StockLookupView: React.FC = () => {
             onClick: () => setLocked((v) => !v),
           },
           {
+            key: 'sim',
+            label: '소진 시뮬레이터',
+            icon: 'search',
+            onClick: () => {
+              const sel = data.find((d) => d.id === selectedRowId);
+              if (!sel) {
+                alert('표에서 품목을 먼저 클릭하세요.');
+                return;
+              }
+              setSimOpen(true);
+              setSimResult(null);
+            },
+          },
+          {
             key: 'download',
             label: '엑셀다운로드',
             icon: 'download',
@@ -1711,6 +1781,94 @@ export const StockLookupView: React.FC = () => {
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* 2-2. 소진 시뮬레이터 (선입선출 미리보기, DB 반영 없음) */}
+      {simOpen && (
+        <div className="bg-indigo-50 border-b border-indigo-300 px-3 py-1.5 shrink-0 text-[12px]">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-indigo-900">소진 시뮬레이터 (선입선출)</span>
+            {(() => {
+              const sel = data.find((d) => d.id === selectedRowId);
+              return (
+                <span className="text-gray-700">
+                  {sel ? `${sel.itemName} [${sel.whName}]` : '품목 미선택'}
+                </span>
+              );
+            })()}
+            <input
+              type="number"
+              value={simQty}
+              onChange={(e) => setSimQty(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') runSimulation();
+              }}
+              placeholder="사용수량(봉)"
+              className="w-[110px] bg-white border border-gray-400 rounded px-2 py-0.5 text-[12px] font-mono text-right"
+            />
+            <button
+              type="button"
+              onClick={runSimulation}
+              className="px-2.5 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded text-[11px]"
+            >
+              계산
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSimOpen(false);
+                setSimResult(null);
+              }}
+              className="ml-auto px-2 py-0.5 bg-white border border-gray-400 rounded text-[11px] hover:bg-gray-100"
+            >
+              닫기
+            </button>
+          </div>
+          {simResult && (
+            <div className="mt-1 bg-white border border-indigo-200 rounded p-1.5">
+              <table className="w-full border-collapse text-[11px]">
+                <thead>
+                  <tr className="bg-[#eef2ff] text-gray-700">
+                    <th className="border border-gray-300 px-1.5 py-0.5">순위</th>
+                    <th className="border border-gray-300 px-1.5 py-0.5 text-left">LOT</th>
+                    <th className="border border-gray-300 px-1.5 py-0.5">입고일</th>
+                    <th className="border border-gray-300 px-1.5 py-0.5">유통기한</th>
+                    <th className="border border-gray-300 px-1.5 py-0.5 text-right">현재고</th>
+                    <th className="border border-gray-300 px-1.5 py-0.5 text-right">차감</th>
+                    <th className="border border-gray-300 px-1.5 py-0.5 text-right">잔여</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {simResult.lines.map((l, i) => (
+                    <tr key={i} className={l.take > 0 ? 'bg-indigo-50/60 font-bold' : ''}>
+                      <td className="border border-gray-200 text-center">{['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨'][i] || `${i + 1}순위`}</td>
+                      <td className="border border-gray-200 px-1.5 font-mono">{l.lotNo}</td>
+                      <td className="border border-gray-200 text-center font-mono">{l.inbound}</td>
+                      <td className="border border-gray-200 text-center font-mono">{l.expiry}</td>
+                      <td className="border border-gray-200 text-right font-mono">{l.cur.toLocaleString()}</td>
+                      <td className="border border-gray-200 text-right font-mono text-indigo-700">
+                        {l.take > 0 ? `-${l.take.toLocaleString()}` : ''}
+                      </td>
+                      <td className="border border-gray-200 text-right font-mono">{l.remain.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="mt-1 text-[11px] text-gray-700">
+                차감 <strong className="text-indigo-700">{simResult.totalTake.toLocaleString()}봉</strong>
+                {simResult.shortage > 0 && (
+                  <span className="ml-2 text-red-600 font-bold">재고부족 {simResult.shortage.toLocaleString()}봉</span>
+                )}
+                <span className="ml-2">
+                  적용 유통기한: <strong>{simResult.fromExpiry}</strong>
+                  {simResult.toExpiry !== simResult.fromExpiry && (
+                    <span> → <strong>{simResult.toExpiry}</strong> (다음 LOT로 이월)</span>
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
