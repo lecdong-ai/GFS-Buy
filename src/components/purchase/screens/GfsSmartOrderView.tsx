@@ -166,13 +166,13 @@ export const GfsSmartOrderView: React.FC = () => {
             warehouse: m.warehouse || '',
             stockDays: m.gfsDays != null ? m.gfsDays : null,
           }));
-        if (snapItems.length > 0) {
-          await fetch('/api/gfs/snapshot', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: snapItems }),
-          });
-        }
+      if (snapItems.length > 0) {
+        await fetch('/api/gfs/snapshot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: 'gfs', items: snapItems }),
+        });
+      }
       } catch {
         /* 스냅샷 실패는 발주 흐름과 무관하게 무시 */
       }

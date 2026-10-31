@@ -1231,6 +1231,7 @@ model GfsSnapshot {
   warehouse   String   @default("")
   stockDays   Float? // GFS calc.stockDays (null = 산출 없음)
   asOf        String   @default("") // 산출 기준일 (YYYY-MM-DD)
+  source      String   @default("gfs") // gfs: GFS 가져오기, erp: ERP LIVE 계산
   remark      String   @default("")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

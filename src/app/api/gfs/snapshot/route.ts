@@ -11,12 +11,17 @@ export async function GET() {
       return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
     }
     const rows = await prisma.gfsSnapshot.findMany({ orderBy: { updatedAt: 'desc' } });
-    const map: Record<string, { stockDays: number | null; asOf: string; productName: string }> = {};
+    const map: Record<string, { stockDays: number | null; asOf: string; productName: string; source: string }> = {};
     rows.forEach((r) => {
-      map[r.productCode] = { stockDays: r.stockDays, asOf: r.asOf, productName: r.productName };
+      map[r.productCode] = { stockDays: r.stockDays, asOf: r.asOf, productName: r.productName, source: (r as any).source || 'gfs' };
     });
     const asOf = rows.length > 0 ? rows[0].asOf : '';
-    return NextResponse.json({ success: true, data: { map, count: rows.length, asOf } });
+    const sources: Record<string, number> = {};
+    rows.forEach((r) => {
+      const s = (r as any).source || 'gfs';
+      sources[s] = (sources[s] || 0) + 1;
+    });
+    return NextResponse.json({ success: true, data: { map, count: rows.length, asOf, sources } });
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || 'snapshot 조회 실패' },
@@ -36,6 +41,7 @@ export async function POST(req: NextRequest) {
     const me = session.user as any;
     const body = await req.json();
     const asOf: string = body.asOf || new Date().toISOString().slice(0, 10);
+    const source: string = body.source === 'erp' ? 'erp' : 'gfs';
     const items = (body.items || []) as {
       productCode?: string;
       productName?: string;
@@ -65,6 +71,7 @@ export async function POST(req: NextRequest) {
           warehouse: String(it.warehouse || ''),
           stockDays: days,
           asOf,
+          source,
         },
         create: {
           productCode: code,
@@ -72,6 +79,7 @@ export async function POST(req: NextRequest) {
           warehouse: String(it.warehouse || ''),
           stockDays: days,
           asOf,
+          source,
         },
       });
       saved += 1;

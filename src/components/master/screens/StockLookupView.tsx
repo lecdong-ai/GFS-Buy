@@ -563,6 +563,7 @@ export const StockLookupView: React.FC = () => {
   const [newRowIds, setNewRowIds] = useState<Set<number>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLiving, setIsLiving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // 빨간펜: 업로드 시 이상행(급변·신규) 목록 — 사람은 보고 판단, 저장은 직접
   const [reviewList, setReviewList] = useState<{ id: number; name: string; kind: string; oldQty: number; curQty: number }[]>([]);
@@ -661,6 +662,7 @@ export const StockLookupView: React.FC = () => {
             const n = snapByNorm.get(normName(name || ''));
             return n || null;
           };
+          const snapSrc: Record<string, number> = snapJson?.success && snapJson.data?.sources ? snapJson.data.sources : {};
           const loaded: StockItem[] = [];
           const seen = new Set<string>();
           json.data.forEach((inv: any, idx: number) => {
@@ -785,7 +787,7 @@ export const StockLookupView: React.FC = () => {
           setLocked(true);
           setMergeInfo(
             orderByNorm.size > 0
-              ? `정본 병합: ${merged}건 반영 · 신규 ${added}건${snapAsOf ? ` · 버팀일 ${snapAsOf} 기준` : ''}`
+              ? `정본 병합: ${merged}건 반영 · 신규 ${added}건${snapAsOf ? ` · 버팀일 ${snapAsOf} 기준${snapSrc.erp ? ` (LIVE ${snapSrc.erp}건)` : ''}` : ''}`
               : orderJson?.data?.errors?.length
               ? `정본 실패: ${orderJson.data.errors[0]}`
               : orderJson && !orderJson.success
@@ -858,6 +860,49 @@ export const StockLookupView: React.FC = () => {
       return next;
     });
     setDirtyRowIds((prev) => new Set(prev).add(Number(rowId)));
+  };
+
+  // ERP LIVE 재계산: 금일 수주 x BOM = 자재별 일사용량 → 버팀일 스냅샷 갱신 (GFS 없이)
+  const handleLiveRecalc = async () => {
+    setIsLiving(true);
+    try {
+      const res = await fetch('/api/gfs/live-usage');
+      const json = await res.json();
+      if (!json.success) {
+        alert('LIVE 계산 실패: ' + (json.error || '알 수 없는 오류'));
+        return;
+      }
+      const rows = json.data?.rows || [];
+      if (rows.length === 0) {
+        alert(`수주 없음 (${json.data?.asOf || ''}). 수주 등록 후 다시 시도하세요.`);
+        return;
+      }
+      const saveRes = await fetch('/api/gfs/snapshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'erp',
+          asOf: json.data.asOf,
+          items: rows.map((r: any) => ({
+            productCode: r.productCode,
+            productName: r.productName,
+            warehouse: r.warehouse || '',
+            stockDays: r.liveDays,
+          })),
+        }),
+      });
+      const saveJson = await saveRes.json();
+      if (!saveJson.success) {
+        alert('스냅샷 저장 실패: ' + (saveJson.error || '알 수 없는 오류'));
+        return;
+      }
+      alert(`LIVE 재계산 완료 (${json.data.asOf} 수주 ${json.data.orderCount}건 · 메뉴 ${json.data.menuCount}종)\n버팀일 ${saveJson.data.saved}건 갱신됨`);
+      loadStockData();
+    } catch (e: any) {
+      alert('LIVE 계산 중 오류: ' + e.message);
+    } finally {
+      setIsLiving(false);
+    }
   };
 
   // 일일 재고조사표 엑셀 업로드 → 표 자동채움 (5시트 정본 그대로)
@@ -1549,6 +1594,12 @@ export const StockLookupView: React.FC = () => {
               setSimOpen(true);
               setSimResult(null);
             },
+          },
+          {
+            key: 'live',
+            label: isLiving ? 'LIVE 계산중...' : '버팀일 LIVE 재계산',
+            icon: 'search',
+            onClick: handleLiveRecalc,
           },
           {
             key: 'download',
