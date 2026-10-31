@@ -502,6 +502,9 @@ export const StockLookupView: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // 자동채움 잠금: 엑셀이 채운 셀은 기본 잠금, 수정모드에서만 편집 가능
+  // 잠금 대상: 창고명·유통기한·박스·낱개·현재고·단가 / 항상편집: 이월·입고·출고·안전재고
+  const [locked, setLocked] = useState(true);
 
   const [mergeInfo, setMergeInfo] = useState('');
 
@@ -624,6 +627,7 @@ export const StockLookupView: React.FC = () => {
           const dirty = new Set<number>(freshIds);
           setDirtyRowIds(dirty);
           setNewRowIds(freshIds);
+          setLocked(true);
           setMergeInfo(
             orderByNorm.size > 0
               ? `정본 병합: ${merged}건 반영 · 신규 ${added}건`
@@ -820,6 +824,7 @@ export const StockLookupView: React.FC = () => {
       setNewRowIds(freshIds);
       setTargetDate(new Date().toISOString().slice(0, 10));
       alert(`업로드 반영 완료: 신규 ${added}건 · 변경 ${updated}건 · 동일 ${same}건 · 안전재고 자동계산 ${autoFilled}건\n확인 후 저장(Ctrl+S)하세요. 신규는 저장 시 품목 자동생성됩니다.`);
+      setLocked(true);
     } catch (e: any) {
       alert('엑셀 파싱 실패: ' + (e.message || '알 수 없는 오류'));
     } finally {
@@ -1001,13 +1006,12 @@ export const StockLookupView: React.FC = () => {
   const columns: MasterGridColumnDef[] = [
     {
       key: 'whName',
-      label: '창고명',
+      label: locked ? '창고명 🔒' : '창고명',
       width: '110px',
       align: 'center',
       sortable: true,
       filterable: true,
-      format: 'dropdown',
-      options: WAREHOUSES,
+      ...(locked ? { format: 'text' as const } : { format: 'dropdown' as const, options: WAREHOUSES }),
     },
     {
       key: 'vendor',
@@ -1091,11 +1095,11 @@ export const StockLookupView: React.FC = () => {
     },
     {
       key: 'expiryDate',
-      label: '유통기한',
+      label: locked ? '유통기한 🔒' : '유통기한',
       width: '95px',
       align: 'center',
       format: 'date',
-      editable: true,
+      editable: !locked,
     },
     {
       key: 'packUnit',
@@ -1107,19 +1111,19 @@ export const StockLookupView: React.FC = () => {
     },
     {
       key: 'boxQty',
-      label: '박스',
+      label: locked ? '박스 🔒' : '박스',
       width: '75px',
       align: 'right',
       format: 'number',
-      editable: true,
+      editable: !locked,
     },
     {
       key: 'pieceQty',
-      label: '낱개',
+      label: locked ? '낱개 🔒' : '낱개',
       width: '75px',
       align: 'right',
       format: 'number',
-      editable: true,
+      editable: !locked,
     },
     {
       key: 'orderDay',
@@ -1157,12 +1161,12 @@ export const StockLookupView: React.FC = () => {
     },
     {
       key: 'currentStock',
-      label: '현재고',
+      label: locked ? '현재고 🔒' : '현재고',
       width: '100px',
       align: 'right',
       format: 'number',
       sortable: true,
-      editable: true,
+      editable: !locked,
       isDangerText: (v, row) => row.currentStock < row.safetyStock,
       render: (v, row) => (
         <span
@@ -1237,11 +1241,11 @@ export const StockLookupView: React.FC = () => {
     },
     {
       key: 'unitPrice',
-      label: '단가',
+      label: locked ? '단가 🔒' : '단가',
       width: '90px',
       align: 'right',
       format: 'currency',
-      editable: true,
+      editable: !locked,
     },
     {
       key: 'totalAmount',
@@ -1274,6 +1278,12 @@ export const StockLookupView: React.FC = () => {
             onClick: () => fileRef.current?.click(),
           },
           {
+            key: 'lock',
+            label: locked ? '🔒 잠금중 (수정모드 켜기)' : '✏️ 수정모드 (잠그기)',
+            icon: 'reset',
+            onClick: () => setLocked((v) => !v),
+          },
+          {
             key: 'download',
             label: '엑셀다운로드',
             icon: 'download',
@@ -1286,7 +1296,7 @@ export const StockLookupView: React.FC = () => {
               }),
           },
         ]}
-        helpContent="창고별/품목별 실시간 이월재고, 입출고, 현재고, 안전재고 대비 과부족 및 재고금액을 조회하고 수정/저장할 수 있습니다. (마우스 클릭으로 직접 입력 가능, Ctrl+S로 저장)"
+        helpContent="창고별/품목별 실시간 재고를 조회하고 수정/저장할 수 있습니다. 엑셀이 채운 셀(창고명·유통기한·박스·낱개·현재고·단가)은 기본 잠금(🔒)이며, 수정모드에서만 편집됩니다. 이월·입고·출고·안전재고는 항상 수정 가능합니다. (Ctrl+S로 저장)"
       />
       <input
         ref={fileRef}
