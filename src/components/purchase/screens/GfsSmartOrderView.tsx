@@ -25,6 +25,8 @@ export const GfsSmartOrderView: React.FC = () => {
   const [memo, setMemo] = useState('');
   const [itemsText, setItemsText] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
+  const [preview, setPreview] = useState('');
 
   useEffect(() => {
     fetch('/api/master/partner?type=P')
@@ -91,6 +93,81 @@ export const GfsSmartOrderView: React.FC = () => {
     }
   };
 
+  // GFS iframe에서 산출결과 가져오기 → ERP 매칭+자동생성 → 저장바 자동채움
+  const handleFetchGfs = async () => {
+    setIsFetching(true);
+    setStatus('GFS 결과 읽는 중...');
+    try {
+      const win = iframeRef.current?.contentWindow as any;
+      if (!win) {
+        alert('GFS 화면이 아직 로드되지 않았습니다.');
+        return;
+      }
+      let raw: any[] = [];
+      try {
+        raw = win.eval('Array.isArray(state?.rawItems) ? state.rawItems : []');
+      } catch {
+        alert('GFS 상태를 읽지 못했습니다. GFS에서 먼저 [발주 데이터 자동 산출]을 실행하세요.');
+        return;
+      }
+      if (!raw || raw.length === 0) {
+        alert('GFS에 산출 결과가 없습니다. GFS에서 엑셀 3종을 올리고 산출을 먼저 실행하세요.');
+        return;
+      }
+      const orderables = raw
+        .map((m: any) => ({
+          name: String(m?.name || '').trim(),
+          boxes: Number(m?.calc?.finalBoxes ?? m?.finalBoxes ?? 0),
+          packUnit: Number(m?.packUnit ?? 0),
+          bagPrice: Number(m?.unitPrice ?? 0),
+          supplierHeader: String(m?.supplier?.name || m?.supplier || ''),
+        }))
+        .filter((x) => x.name && x.boxes > 0);
+      if (orderables.length === 0) {
+        alert('발주 대상(박스>0)이 없습니다. GFS 필터(발주 대상만 보기)를 확인하세요.');
+        setStatus('발주 대상 없음');
+        return;
+      }
+      setStatus(`GFS ${orderables.length}건 매칭 중...`);
+      const res = await fetch('/api/gfs/materialize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: orderables, orderDate }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        alert('매칭 실패: ' + (json.error || '알 수 없는 오류'));
+        setStatus('매칭 실패');
+        return;
+      }
+      const { matched = [], created = [], failed = [] } = json.data || {};
+      const newProducts = created.filter((c: any) => c.type === 'product');
+      // 저장바에 productCode 기준으로 자동채움 (order-result 규격)
+      const forOrder = matched
+        .filter((m: any) => m.productCode)
+        .map((m: any) => ({
+          productCode: m.productCode,
+          orderQty: m.orderQty,
+          unitPrice: m.boxPrice || 0,
+          partnerId: m.partnerId || undefined,
+        }));
+      setItemsText(JSON.stringify(forOrder));
+      const msg =
+        `매칭 ${matched.length}건` +
+        (newProducts.length ? ` · 신규생성 ${newProducts.length}건(${newProducts.slice(0, 3).map((c: any) => c.name).join(', ')}${newProducts.length > 3 ? ' 외' : ''})` : '') +
+        (failed.length ? ` · 실패 ${failed.length}건` : '');
+      setPreview(
+        failed.length ? `미처리: ${failed.map((f: any) => f.name).join(', ')}` : ''
+      );
+      setStatus(`가져오기 완료: ${msg} → 확인 후 발주저장`);
+    } catch (e: any) {
+      alert('가져오기 실패: ' + e.message);
+      setStatus('가져오기 실패');
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
   // 로그인한 담당자 신원으로 발주 저장
   const handleSaveOrder = async () => {
     if (!itemsText.trim()) {
@@ -144,6 +221,15 @@ export const GfsSmartOrderView: React.FC = () => {
         </span>
         <span className="text-slate-400 whitespace-nowrap hidden lg:inline">· {status}</span>
         <div className="ml-auto flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={handleFetchGfs}
+            disabled={isFetching}
+            className="h-6 px-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded text-[11px] font-bold"
+            title="GFS 산출결과를 읽어 ERP 품목 매칭+자동생성 후 저장바에 채움"
+          >
+            {isFetching ? '가져오는중' : 'GFS결과 가져오기'}
+          </button>
           <button
             type="button"
             onClick={() => setBarsVisible((v) => !v)}
@@ -227,6 +313,11 @@ export const GfsSmartOrderView: React.FC = () => {
           >
             {isSaving ? '저장중' : '발주저장'}
           </button>
+        </div>
+      )}
+      {barsVisible && preview && (
+        <div className="shrink-0 bg-amber-50 border-b border-amber-300 px-2 py-0.5 text-[11px] text-amber-800">
+          {preview}
         </div>
       )}
 
