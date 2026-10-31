@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
 // GET /api/gfs/order-data
 // GFS 스마트발주에서 사용할 ERP 기준정보 일괄 제공 (품목/재고/단가)
 export async function GET() {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
+    }
     const [products, inventory, prices] = await Promise.all([
       prisma.product.findMany({
         where: { isUsed: true },

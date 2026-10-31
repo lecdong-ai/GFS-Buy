@@ -1,12 +1,47 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
-import { SalesActionBar } from '@/components/sales/common/SalesActionBar';
+import React, { useEffect, useRef, useState } from 'react';
+import { useSession } from 'next-auth/react';
+
+interface PartnerOpt {
+  id: string;
+  name: string;
+}
 
 export const GfsSmartOrderView: React.FC = () => {
+  const { data: session } = useSession();
+  const me: any = session?.user;
+  const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [status, setStatus] = useState('대기 중');
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [barsVisible, setBarsVisible] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // 발주 저장 폼
+  const [orderDate, setOrderDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [partners, setPartners] = useState<PartnerOpt[]>([]);
+  const [partnerId, setPartnerId] = useState('');
+  const [memo, setMemo] = useState('');
+  const [itemsText, setItemsText] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/master/partner?type=P')
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.success && Array.isArray(j.data)) {
+          setPartners(j.data.map((p: any) => ({ id: p.id, name: p.name })));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
 
   const handleOpenNewWindow = () => {
     window.open('/gfs/index.html', '_blank', 'width=1600,height=900');
@@ -16,7 +51,19 @@ export const GfsSmartOrderView: React.FC = () => {
     iframeRef.current?.contentWindow?.location.reload();
   };
 
-  // ERP 기준정보(JSON) 다운로드 → GFS에 직접 올릴 수 있는 형태
+  const handleToggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await containerRef.current?.requestFullscreen();
+      }
+    } catch {
+      alert('전체화면을 지원하지 않는 브라우저입니다. 새창으로 열기를 사용하세요.');
+    }
+  };
+
+  // ERP 기준정보(JSON) 다운로드
   const handleDownloadErpData = async () => {
     setIsLoadingData(true);
     setStatus('ERP 데이터 조회 중...');
@@ -35,7 +82,7 @@ export const GfsSmartOrderView: React.FC = () => {
       a.download = `GFS_ERP_기준정보_${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      setStatus(`완료: 품목 ${json.data.products?.length ?? 0}건 / 재고 ${json.data.inventory?.length ?? 0}건 / 단가 ${json.data.prices?.length ?? 0}건`);
+      setStatus(`완료: 품목 ${json.data.products?.length ?? 0}건 / 재고 ${json.data.inventory?.length ?? 0}건`);
     } catch (e: any) {
       alert('다운로드 실패: ' + e.message);
       setStatus('다운로드 실패');
@@ -44,37 +91,154 @@ export const GfsSmartOrderView: React.FC = () => {
     }
   };
 
-  return (
-    <div className="flex flex-col h-full w-full bg-[#e2e8f0] select-none text-[12px]">
-      <SalesActionBar
-        title="스마트발주(GFS)"
-        buttons={[
-          { key: 'erp-data', label: isLoadingData ? '조회중...' : 'ERP 기준정보(JSON)', icon: 'search', variant: 'primary', onClick: handleDownloadErpData },
-          { key: 'reload', label: '새로고침', icon: 'reset', variant: 'secondary', onClick: handleReload },
-          { key: 'popup', label: '새창으로 열기', icon: 'print', variant: 'secondary', onClick: handleOpenNewWindow },
-        ]}
-        helpContent="발주 전용 GFS 스마트발주 화면을 ERP 안에서 그대로 사용합니다. 엑셀 업로드 방식은 기존과 동일하며, ERP 기준정보(JSON) 버튼으로 품목/재고/단가를 내려받아 대조할 수 있습니다. 발주 확정분은 GFS 엑셀 다운로드 후 매입관리 발주등록에 반영하세요."
-      />
+  // 로그인한 담당자 신원으로 발주 저장
+  const handleSaveOrder = async () => {
+    if (!itemsText.trim()) {
+      alert('발주 품목을 JSON으로 입력하세요. 예: [{"productCode":"...","orderQty":10}]');
+      return;
+    }
+    let items: any[];
+    try {
+      items = JSON.parse(itemsText);
+    } catch {
+      alert('JSON 형식이 올바르지 않습니다.');
+      return;
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+      alert('발주 품목이 비어 있습니다.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const res = await fetch('/api/gfs/order-result', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderDate, partnerId: partnerId || undefined, memo, items }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        alert('발주 저장 실패: ' + (json.error || '알 수 없는 오류'));
+        setStatus('발주 저장 실패');
+        return;
+      }
+      const orders = (json.data || []).map((o: any) => o.orderNo).join(', ');
+      alert(`발주 저장 완료 (${me?.name || me?.loginId || '담당자'} 명의)\n${json.message}\n${orders}`);
+      setStatus(`발주 완료: ${orders}`);
+      setItemsText('');
+    } catch (e: any) {
+      alert('저장 실패: ' + e.message);
+      setStatus('발주 저장 실패');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-      <div className="bg-[#efefef] border-b border-[#c0c0c0] px-3 py-1.5 flex items-center justify-between shadow-inner">
-        <span className="font-semibold text-gray-700">
-          상태: <span className="text-blue-700">{status}</span>
+  return (
+    <div ref={containerRef} className="flex flex-col h-full w-full bg-[#e2e8f0] text-[12px] overflow-hidden">
+      {/* 슬림 1줄 툴바 */}
+      <div className="h-9 shrink-0 bg-[#1e293b] text-white px-3 flex items-center gap-2 text-[12px]">
+        <span className="w-1.5 h-4 bg-emerald-500 rounded-2xs inline-block" />
+        <span className="font-bold whitespace-nowrap">스마트발주(GFS)</span>
+        <span className="text-slate-300 whitespace-nowrap hidden md:inline">
+          {me?.name || '-'}({me?.loginId || '-'})
         </span>
-        <span className="text-[11px] text-gray-500">
-          iframe: <span className="font-mono">/gfs/index.html</span> (ERP 로그인과 동일 세션)
-        </span>
+        <span className="text-slate-400 whitespace-nowrap hidden lg:inline">· {status}</span>
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setBarsVisible((v) => !v)}
+            className="h-6 px-2 bg-slate-700 hover:bg-slate-600 rounded text-[11px] font-bold"
+            title={barsVisible ? '입력바 숨기기 (발주창 넓게)' : '입력바 보이기'}
+          >
+            {barsVisible ? '▲ 바 숨기기' : '▼ 바 보이기'}
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadErpData}
+            disabled={isLoadingData}
+            className="h-6 px-2 bg-slate-700 hover:bg-slate-600 rounded text-[11px] font-bold disabled:opacity-50"
+          >
+            {isLoadingData ? '조회중' : 'ERP정보'}
+          </button>
+          <button
+            type="button"
+            onClick={handleReload}
+            className="h-6 px-2 bg-slate-700 hover:bg-slate-600 rounded text-[11px] font-bold"
+          >
+            새로고침
+          </button>
+          <button
+            type="button"
+            onClick={handleToggleFullscreen}
+            className="h-6 px-2 bg-blue-600 hover:bg-blue-500 rounded text-[11px] font-bold"
+          >
+            {isFullscreen ? '전체화면 해제' : '전체화면'}
+          </button>
+          <button
+            type="button"
+            onClick={handleOpenNewWindow}
+            className="h-6 px-2 bg-emerald-600 hover:bg-emerald-500 rounded text-[11px] font-bold"
+          >
+            새창
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 min-h-0 p-2">
-        <div className="h-full bg-white border border-[#94a3b8] rounded shadow-xs overflow-hidden">
-          <iframe
-            ref={iframeRef}
-            src="/gfs/index.html"
-            title="GFS 스마트발주"
-            className="w-full h-full border-0"
-            allow="clipboard-read; clipboard-write"
+      {/* 발주 저장바 (접기 가능) */}
+      {barsVisible && (
+        <div className="shrink-0 bg-white border-b border-gray-300 px-2 py-1 flex flex-wrap items-center gap-1.5">
+          <input
+            type="date"
+            value={orderDate}
+            onChange={(e) => setOrderDate(e.target.value)}
+            className="h-6 border border-gray-300 px-1.5 text-[12px] rounded-xs bg-white"
+            title="발주일자"
           />
+          <select
+            value={partnerId}
+            onChange={(e) => setPartnerId(e.target.value)}
+            className="h-6 border border-gray-300 px-1.5 text-[12px] rounded-xs bg-white max-w-[180px]"
+            title="거래처 (미선택 시 기본 거래처)"
+          >
+            <option value="">거래처 자동</option>
+            {partners.map((p) => (
+              <option key={p.id} value={p.id}>{p.id} {p.name}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+            placeholder="메모"
+            className="h-6 border border-gray-300 px-1.5 text-[12px] rounded-xs w-[120px]"
+          />
+          <input
+            type="text"
+            value={itemsText}
+            onChange={(e) => setItemsText(e.target.value)}
+            placeholder='발주품목 JSON: [{"productCode":"...","orderQty":10}]'
+            className="h-6 border border-gray-300 px-1.5 text-[12px] rounded-xs flex-1 min-w-[200px] font-mono"
+          />
+          <button
+            type="button"
+            onClick={handleSaveOrder}
+            disabled={isSaving}
+            className="h-6 px-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xs text-[12px] whitespace-nowrap"
+          >
+            {isSaving ? '저장중' : '발주저장'}
+          </button>
         </div>
+      )}
+
+      {/* GFS iframe 최대 확보 */}
+      <div className="flex-1 min-h-0 bg-white">
+        <iframe
+          ref={iframeRef}
+          src="/gfs/index.html"
+          title="GFS 스마트발주"
+          className="w-full h-full border-0 block"
+          allow="clipboard-read; clipboard-write"
+        />
       </div>
     </div>
   );

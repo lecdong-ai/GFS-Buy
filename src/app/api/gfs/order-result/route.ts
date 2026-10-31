@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
 interface OrderResultItem {
@@ -16,6 +18,17 @@ interface OrderResultItem {
 // body: { orderDate, partnerId?, memo?, items: OrderResultItem[] }
 export async function POST(req: NextRequest) {
   try {
+    // 로그인 세션 필수: 담당자 신원으로 발주 기록
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json(
+        { success: false, error: '로그인이 필요합니다.' },
+        { status: 401 }
+      );
+    }
+    const me = session.user as any;
+    const actorLabel = `${me.name || me.loginId || '담당자'}(${me.loginId || me.id || ''})`;
+
     const body = await req.json();
     const { orderDate, partnerId, memo, items } = body as {
       orderDate?: string;
@@ -126,12 +139,26 @@ export async function POST(req: NextRequest) {
           status: '발주',
           totalAmount,
           remark: memo || 'GFS 스마트발주 연동 생성',
-          createdBy: 'gfs-bridge',
+          createdBy: actorLabel,
           details: { create: detailData },
         },
       });
 
       createdOrders.push({ orderNo, itemCount: detailData.length });
+
+      // 발주 감사 로그 (담당자 추적)
+      await prisma.systemLog.create({
+        data: {
+          logDate: new Date().toISOString(),
+          userId: Number(me.id) || undefined,
+          loginId: String(me.loginId || ''),
+          userName: String(me.name || ''),
+          action: 'GFS발주생성',
+          menuId: 'pur-gfs-smart-order',
+          menuName: '스마트발주(GFS)',
+          detail: `${actorLabel} 발주서 ${orderNo} 생성 (${detailData.length}품목, ${totalAmount.toLocaleString()}원)`,
+        },
+      }).catch(() => {});
     }
 
     if (createdOrders.length === 0) {

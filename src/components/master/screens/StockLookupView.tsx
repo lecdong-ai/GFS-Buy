@@ -8,8 +8,8 @@ import { exportGridToExcel } from '@/lib/excelExport';
 
 interface StockItem {
   id: number;
-  whCode: string;
   whName: string;
+  vendor: string;
   itemCode: string;
   itemType: string;
   category: string;
@@ -32,8 +32,8 @@ const ITEM_TYPES = ['원자재', '부자재', '반제품', '완제품'];
 const SAMPLE_STOCK_DATA: StockItem[] = [
   {
     id: 1,
-    whCode: 'W01',
     whName: '상온',
+    vendor: '평화영농조합',
     itemCode: 'M10001',
     itemType: '원자재',
     category: '곡류',
@@ -51,8 +51,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
   },
   {
     id: 2,
-    whCode: 'W01',
     whName: '상온',
+    vendor: '오뚜기',
     itemCode: 'M10002',
     itemType: '원자재',
     category: '조미료',
@@ -70,8 +70,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
   },
   {
     id: 3,
-    whCode: 'W01',
     whName: '상온',
+    vendor: '동원',
     itemCode: 'M10003',
     itemType: '원자재',
     category: '수산가공',
@@ -89,8 +89,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
   },
   {
     id: 4,
-    whCode: 'W01',
     whName: '상온',
+    vendor: '농심태경',
     itemCode: 'M10004',
     itemType: '원자재',
     category: '건어물',
@@ -108,8 +108,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
   },
   {
     id: 5,
-    whCode: 'W02',
     whName: '부자재',
+    vendor: '글로벌코리아',
     itemCode: 'M20001',
     itemType: '부자재',
     category: '포장재',
@@ -127,8 +127,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
   },
   {
     id: 6,
-    whCode: 'W02',
     whName: '부자재',
+    vendor: '두레',
     itemCode: 'M20002',
     itemType: '부자재',
     category: '용기',
@@ -146,8 +146,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
   },
   {
     id: 7,
-    whCode: 'W03',
     whName: '냉장1',
+    vendor: '한성',
     itemCode: 'M10010',
     itemType: '원자재',
     category: '축산물',
@@ -165,8 +165,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
   },
   {
     id: 8,
-    whCode: 'W03',
     whName: '냉장1',
+    vendor: 'CJ',
     itemCode: 'M10011',
     itemType: '원자재',
     category: '축산물',
@@ -184,8 +184,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
   },
   {
     id: 9,
-    whCode: 'W04',
     whName: '냉장2',
+    vendor: '한울(네트웍스)',
     itemCode: 'M10020',
     itemType: '원자재',
     category: '채소류',
@@ -203,8 +203,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
   },
   {
     id: 10,
-    whCode: 'W04',
     whName: '냉장2',
+    vendor: '한울(네트웍스)',
     itemCode: 'M10021',
     itemType: '원자재',
     category: '채소류',
@@ -222,8 +222,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
   },
   {
     id: 11,
-    whCode: 'W05',
     whName: '냉동',
+    vendor: '현대그린푸드',
     itemCode: 'M10030',
     itemType: '원자재',
     category: '냉동가공',
@@ -241,8 +241,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
   },
   {
     id: 12,
-    whCode: 'W05',
     whName: '냉동',
+    vendor: '현대그린푸드',
     itemCode: 'M10031',
     itemType: '원자재',
     category: '냉동가공',
@@ -260,8 +260,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
   },
   {
     id: 13,
-    whCode: 'W01',
     whName: '상온',
+    vendor: '당사',
     itemCode: 'P10001',
     itemType: '완제품',
     category: '삼각김밥',
@@ -279,8 +279,8 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
   },
   {
     id: 14,
-    whCode: 'W01',
     whName: '상온',
+    vendor: '당사',
     itemCode: 'P10004',
     itemType: '완제품',
     category: '도시락',
@@ -320,8 +320,8 @@ export const StockLookupView: React.FC = () => {
             const price = inv.unitPrice || (inv.currentQty > 0 ? inv.stockAmount / inv.currentQty : 2000);
             return {
               id: inv.id || idx + 1,
-              whCode: inv.warehouse?.slice(0, 3) || 'W01',
               whName: inv.warehouse || '상온',
+              vendor: inv.product?.partner?.name || inv.product?.partnerId || '',
               itemCode: inv.productCode || inv.product?.productCode || '',
               itemType: inv.category || inv.product?.category || '원자재',
               category: inv.product?.kind || '원부자재',
@@ -452,7 +452,8 @@ export const StockLookupView: React.FC = () => {
         const matchName = item.itemName.toLowerCase().includes(kw);
         const matchCode = item.itemCode.toLowerCase().includes(kw);
         const matchCat = item.category.toLowerCase().includes(kw);
-        if (!matchName && !matchCode && !matchCat) return false;
+        const matchVendor = (item.vendor || '').toLowerCase().includes(kw);
+        if (!matchName && !matchCode && !matchCat && !matchVendor) return false;
       }
       return true;
     });
@@ -485,21 +486,23 @@ export const StockLookupView: React.FC = () => {
 
   const columns: MasterGridColumnDef[] = [
     {
-      key: 'whCode',
-      label: '창고코드',
-      width: '80px',
-      align: 'center',
-      sortable: true,
-      editable: false,
-    },
-    {
       key: 'whName',
       label: '창고명',
       width: '110px',
       align: 'center',
       sortable: true,
       filterable: true,
-      editable: true,
+      format: 'dropdown',
+      options: WAREHOUSES,
+    },
+    {
+      key: 'vendor',
+      label: '거래처',
+      width: '140px',
+      align: 'left',
+      sortable: true,
+      filterable: true,
+      editable: false,
     },
     {
       key: 'itemCode',
@@ -730,7 +733,7 @@ export const StockLookupView: React.FC = () => {
             <div className="relative">
               <input
                 type="text"
-                placeholder="품명/품번/품종 검색"
+                placeholder="품명/품번/품종/거래처 검색"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
                 className="bg-white border border-gray-400 rounded px-2 py-0.5 text-[12px] w-44"
