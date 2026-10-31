@@ -124,14 +124,30 @@ export const OrderUploadGsrView: React.FC = () => {
         alert('발주현황 시트를 찾지 못했습니다. (분류/품명/1편/2편 헤더 확인)');
         return;
       }
-      if (!window.confirm(`[${usedSheet}] 수주 ${parsed.length}건을 ${new Date().toISOString().slice(0, 10)} 일자로 등록할까요?`)) {
+      const orderDate = new Date().toISOString().slice(0, 10);
+      try {
+        const dupRes = await fetch(`/api/sales/order?orderDate=${orderDate}`);
+        const dupJson = await dupRes.json();
+        const dupList = (dupJson.success && Array.isArray(dupJson.data) ? dupJson.data : []).filter(
+          (o: any) => (o.uploadMethod || '').includes('발주현황')
+        );
+        if (dupList.length > 0) {
+          const info = dupList.map((o: any) => `${o.orderNo}`).join(', ');
+          if (!window.confirm(`이미 등록된 발주현황이 ${dupList.length}건 있어요 (${info}).\n그래도 새로 등록할까요? (중복 집계 주의)`)) {
+            return;
+          }
+        }
+      } catch {
+        /* 조회 실패 시 그냥 진행 */
+      }
+      if (!window.confirm(`[${usedSheet}] 수주 ${parsed.length}건을 ${orderDate} 일자로 등록할까요?`)) {
         return;
       }
       const res = await fetch('/api/sales/intake', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          orderDate: new Date().toISOString().slice(0, 10),
+          orderDate,
           items: parsed.map((p) => ({ menuName: p.menuName, category: p.category, qty1: p.qty1, qty2: p.qty2, total: p.total })),
         }),
       });
