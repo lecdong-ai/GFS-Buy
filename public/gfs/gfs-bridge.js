@@ -25,6 +25,24 @@
     } catch (e) { /* ignore */ }
   }
 
+  function showBadge(badgeId, labelId, text) {
+    try {
+      var b = document.getElementById(badgeId);
+      if (b) {
+        b.classList.remove('hidden');
+        b.classList.add('flex');
+      }
+      var l = labelId && document.getElementById(labelId);
+      if (l) l.textContent = text;
+    } catch (e) { /* ignore */ }
+  }
+
+  function toast(msg, kind) {
+    try {
+      if (typeof showToast === 'function') showToast(msg, kind || 'info');
+    } catch (e) { /* ignore */ }
+  }
+
   function applyOrders(items, source, origin) {
     if (typeof state === 'undefined' || !state) {
       sendBack(source, origin, { type: 'GFS_ORDERS_APPLIED', success: false, error: 'GFS state 없음 (발주서 먼저 로드 필요)' });
@@ -58,6 +76,8 @@
     const related = safeGet(function () {
       return (state.rawItems || []).filter(function (m) { return m.isRelatedToOrders; }).length;
     }, -1);
+    showBadge('ordersLoadedBadge', 'loadedOrdersFileName', 'ERP연동 수주 ' + orders.length + '종');
+    toast('ERP 수주 ' + orders.length + '종 반영됨 (관련 품목 약 ' + (related >= 0 ? related : '?') + '종)', 'success');
     sendBack(source, origin, { type: 'GFS_ORDERS_APPLIED', success: true, count: orders.length, totalQty: total, relatedItems: related });
   }
 
@@ -110,6 +130,8 @@
       sendBack(source, origin, { type: 'GFS_AUDIT_APPLIED', success: false, error: String((e && e.message) || e) });
       return;
     }
+    showBadge('auditLoadedBadge', 'loadedAuditFileName', 'ERP연동 실사 ' + (items || []).length + '건');
+    toast('ERP 실사 재고 반영됨 (매칭 ' + (res.matchedCount || 0) + '건)', 'success');
     sendBack(source, origin, { type: 'GFS_AUDIT_APPLIED', success: true, matched: res.matchedCount || 0, discrepancy: res.discrepancyCount || 0 });
   }
 
