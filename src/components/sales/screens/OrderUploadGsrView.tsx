@@ -46,8 +46,6 @@ const COLUMNS: GridColumnDef[] = [
   { key: 'unit', label: '단위', width: '45px', align: 'center' },
   { key: 'orderQty', label: '주문수량', width: '80px', align: 'right', format: 'number' },
   { key: 'delivDate', label: '납품일자', width: '90px', align: 'center', format: 'date' },
-  { key: 'unitPrice', label: '납품단가', width: '85px', align: 'right', format: 'currency' },
-  { key: 'orderAmt', label: '주문금액', width: '100px', align: 'right', format: 'currency' },
   { key: 'delivTo', label: '납품처', width: '110px', align: 'left' },
   { key: 'shipTo', label: '배송처', width: '120px', align: 'left' },
   { key: 'poNo', label: 'P/O no.', width: '130px', align: 'center' },
