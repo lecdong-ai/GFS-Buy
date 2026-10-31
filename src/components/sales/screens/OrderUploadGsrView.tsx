@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import * as XLSX from 'xlsx';
 import { SalesActionBar } from '../common/SalesActionBar';
 import { SalesDataGrid, GridColumnDef } from '../common/SalesDataGrid';
 import { usePipeline } from '@/context/PipelineContext';
 import { exportGridToExcel } from '@/lib/excelExport';
+import { parseOrderStatusRows, pickOrderSheetName } from '@/lib/gfs/salesIntake';
 
 interface OrderUploadRow {
   id: number;
@@ -57,8 +59,10 @@ const COLUMNS: GridColumnDef[] = [
 export const OrderUploadGsrView: React.FC = () => {
   const [data, setData] = useState<OrderUploadRow[]>(INITIAL_ROWS);
   const { openExcelOrderModal } = usePipeline();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [isIntaking, setIsIntaking] = useState(false);
 
-  useEffect(() => {
+  const loadOrders = useCallback(() => {
     fetch('/api/sales/order')
       .then((res) => res.json())
       .then((json) => {
@@ -94,6 +98,60 @@ export const OrderUploadGsrView: React.FC = () => {
       .catch((err) => console.error('Failed to load uploaded orders', err));
   }, []);
 
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders]);
+
+  // 발주현황(카톡보내기) 엑셀 → 수주 일괄등록
+  const handleIntakeFile = async (file: File) => {
+    setIsIntaking(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const names = pickOrderSheetName(wb.SheetNames);
+      let parsed: ReturnType<typeof parseOrderStatusRows> = null;
+      let usedSheet = '';
+      for (const n of names) {
+        const ws = wb.Sheets[n];
+        if (!ws) continue;
+        const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+        const r = parseOrderStatusRows(rows);
+        if (r && r.length > 0) {
+          parsed = r;
+          usedSheet = n;
+          break;
+        }
+      }
+      if (!parsed || parsed.length === 0) {
+        alert('발주현황 시트를 찾지 못했습니다. (분류/품명/1편/2편 헤더 확인)');
+        return;
+      }
+      if (!window.confirm(`[${usedSheet}] 수주 ${parsed.length}건을 ${new Date().toISOString().slice(0, 10)} 일자로 등록할까요?`)) {
+        return;
+      }
+      const res = await fetch('/api/sales/intake', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderDate: new Date().toISOString().slice(0, 10),
+          items: parsed.map((p) => ({ menuName: p.menuName, category: p.category, qty1: p.qty1, qty2: p.qty2, total: p.total })),
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        alert(`수주 등록 완료 (${json.data.orderNo})\n매칭 ${json.data.matched}건 · 신규 ${json.data.createdProducts}건 · 제외 ${json.data.skipped}건`);
+        loadOrders();
+      } else {
+        alert('수주 등록 실패: ' + (json.error || '알 수 없는 오류'));
+      }
+    } catch (e: any) {
+      alert('파일 처리 중 오류: ' + e.message);
+    } finally {
+      setIsIntaking(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
   const handleReset = () => {
     setData(INITIAL_ROWS);
   };
@@ -106,9 +164,20 @@ export const OrderUploadGsrView: React.FC = () => {
         buttons={[
           { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: handleReset },
           { key: 'download', label: '엑셀다운로드', icon: 'excel', variant: 'secondary', onClick: () => exportGridToExcel({ filename: '주문등록_GSR_출하내역', sheetName: '수주내역', columns: COLUMNS, data }) },
-          { key: 'upload', label: '엑셀업로드', icon: 'excel', variant: 'primary', onClick: openExcelOrderModal },
+          { key: 'upload', label: '엑셀업로드', icon: 'excel', variant: 'secondary', onClick: openExcelOrderModal },
+          { key: 'intake', label: isIntaking ? '등록 중...' : '발주현황 업로드', icon: 'excel', variant: 'primary', onClick: () => fileRef.current?.click() },
         ]}
-        helpContent="GS리테일 B2B EDI 시스템에서 내려받은 점포별/센터별 발주 엑셀 파일을 업로드하여 생산 및 출하 시스템으로 일괄 등록합니다."
+        helpContent="GS리테일 B2B EDI 시스템에서 내려받은 점포별/센터별 발주 엑셀 파일을 업로드하여 생산 및 출하 시스템으로 일괄 등록합니다. [발주현황 업로드]는 카톡 발주현황 엑셀(완제품 1편/2편)을 수주로 일괄 등록합니다 (LIVE 버팀일 계산의 수주 근거)."
+      />
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleIntakeFile(f);
+        }}
       />
 
       {/* 2. 서브 헤더 바 (화면 캡처 091210.png: 최종업로드일시) */}
