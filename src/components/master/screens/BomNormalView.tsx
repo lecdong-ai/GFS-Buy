@@ -170,6 +170,7 @@ export const BomNormalView: React.FC = () => {
         `발주서 정본 BOM 일괄적재 미리보기\n\n` +
           `자재 ${d.materialCount}종 · 메뉴 ${d.menuCount}종 · 연결 ${d.linkCount}건\n` +
           `신규 자재 ${d.newMaterials}종 / 신규 메뉴 ${d.newMenus}종\n` +
+          `제외(메모성 ${d.skippedMemo?.length ?? 0}건): ${(d.skippedMemo || []).slice(0, 5).join(', ')}${(d.skippedMemo || []).length > 5 ? ' 외' : ''}\n` +
           `신규 예시: ${(d.sampleNewMaterials || []).slice(0, 3).join(', ')}\n\n` +
           `실행하면 없는 품목·거래처를 자동생성하고 BOM v1.0을 적재(덮어쓰기)합니다.\n진행할까요?`
       );
@@ -184,6 +185,7 @@ export const BomNormalView: React.FC = () => {
         const r = exeJson.data;
         alert(
           `BOM 일괄적재 완료\n메뉴 ${r.menuCount}종 · 품목생성 ${r.createdProducts}건 · 거래처 ${r.createdPartners}건 · BOM상세 ${r.createdDetails}건` +
+            (r.skippedMemo?.length ? `\n제외(메모성 ${r.skippedMemo.length}건): ${r.skippedMemo.slice(0, 5).join(', ')}` : '') +
             (r.errors?.length ? `\n실패 ${r.errors.length}건: ${r.errors.slice(0, 3).join(' / ')}` : '')
         );
         loadBom();

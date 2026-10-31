@@ -31,6 +31,9 @@ export async function POST(req: NextRequest) {
     const dryRun = body.dryRun !== false; // 기본 미리보기
     const today = new Date().toISOString().slice(0, 10);
 
+    // 메모성 메뉴: 품목으로 만들지 않고 목록만 보고 (집계메모/작업메모/삭제됨)
+    const MEMO_MENU_PATTERN = /전체물량|전처리실|밥비닐|삭제/;
+
     // 정본 파일 로드
     const orderCandidates = [
       `${process.cwd()}/★★발주서양식통합★★(정준오)(v.260831) (2).xlsx`,
@@ -68,11 +71,16 @@ export async function POST(req: NextRequest) {
     const wb = XLSX.readFile(orderFile);
     const mats = parseOrderSheetBom(wb);
 
-    // 메뉴 기준 역전개: menu -> [{material, perUnit}]
+    // 메뉴 기준 역전개: menu -> [{material, perUnit}] (메모성은 제외하고 목록만)
     const menuMap = new Map<string, { menu: string; links: { mat: (typeof mats)[number]; perUnit: number }[] }>();
+    const skippedMemo: string[] = [];
     for (const m of mats) {
       for (const link of m.menus) {
         if (!link.menu || link.perUnit <= 0) continue;
+        if (MEMO_MENU_PATTERN.test(link.menu)) {
+          if (!skippedMemo.includes(link.menu)) skippedMemo.push(link.menu);
+          continue;
+        }
         const e = menuMap.get(link.normMenu) || { menu: link.menu, links: [] };
         e.links.push({ mat: m, perUnit: link.perUnit });
         menuMap.set(link.normMenu, e);
@@ -100,6 +108,7 @@ export async function POST(req: NextRequest) {
           newMaterials: newMaterials.length,
           existingMenus: menuMap.size - newMenus.length,
           newMenus: newMenus.length,
+          skippedMemo,
           sampleNewMaterials: newMaterials.slice(0, 10).map((m) => m.name),
           sampleNewMenus: newMenus.slice(0, 10).map((e) => e.menu),
           sampleLinks: [...menuMap.values()].slice(0, 5).map((e) => ({
@@ -254,7 +263,7 @@ export async function POST(req: NextRequest) {
           action: 'BOM일괄적재',
           menuId: 'master-bom-normal',
           menuName: 'BOM(일반)',
-          detail: `${me.name || me.loginId} BOM 일괄적재: 메뉴 ${sortedMenus.length}종, 품목생성 ${createdProducts}건, 상세 ${createdDetails}건${errors.length ? `, 실패 ${errors.length}건` : ''}`,
+          detail: `${me.name || me.loginId} BOM 일괄적재: 메뉴 ${sortedMenus.length}종, 품목생성 ${createdProducts}건, 상세 ${createdDetails}건${skippedMemo.length ? `, 메모제외 ${skippedMemo.length}건` : ''}${errors.length ? `, 실패 ${errors.length}건` : ''}`,
         },
       })
       .catch(() => {});
@@ -267,6 +276,7 @@ export async function POST(req: NextRequest) {
         createdPartners,
         createdHeaders,
         createdDetails,
+        skippedMemo,
         errors: errors.slice(0, 20),
       },
     });
