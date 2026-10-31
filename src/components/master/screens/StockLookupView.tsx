@@ -39,6 +39,10 @@ interface StockItem {
   orderSupplier: string; // 발주처 (발주서 정본 거래처명)
   orderDays: number; // 발주일수 (발주서 G열)
   itemCode: string;
+  lotNo: string; // LOT번호 (입고 시 자동채번)
+  lotDate: string; // 입고일 원본(YYYY-MM-DD, 순위 계산용) — 화면 표시는 입고일
+  burnRank: number; // 소진순위 (같은 품목+창고 내 입고일 빠른 순, 1부터)
+  fefoWarn: boolean; // 나중 LOT 유통기한이 더 빠르면 true
   itemType: string;
   category: string;
   itemName: string;
@@ -90,6 +94,53 @@ export function expiryInDays(expiry: string, base: string): number {
   return Math.floor((t - b) / 86400000);
 }
 
+/** 입고일 키 (비교용 YYYYMMDD, 파싱불가 99999999) */
+function inboundKey(s: string): string {
+  const m = /(\d{4})-(\d{2})-(\d{2})/.exec(s || '');
+  if (m) return `${m[1]}${m[2]}${m[3]}`;
+  const m2 = /D\+(\d+)/.exec(s || '');
+  if (m2) return `9${m2[1].padStart(7, '0')}`;
+  return '99999999';
+}
+
+/**
+ * LOT 소진순위 부여 (선입선출): 같은 품목+창고 그룹 내 입고일 빠른 순 1,2,3...
+ * 나중 LOT 유통기한이 더 빠르면 fefoWarn=true (FEFO 역전)
+ * 입력 배열을 직접 수정하고 반환
+ */
+export function applyBurnRank(rows: StockItem[]): StockItem[] {
+  const groups = new Map<string, StockItem[]>();
+  rows.forEach((r) => {
+    const k = `${normName(r.itemName)}||${r.whName}`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k)!.push(r);
+  });
+  groups.forEach((g) => {
+    if (g.length <= 1) {
+      if (g[0]) {
+        g[0].burnRank = 1;
+        g[0].fefoWarn = false;
+      }
+      return;
+    }
+    const sorted = [...g].sort((a, b) => {
+      const ka = inboundKey(a.lotDate || a.inboundDate);
+      const kb = inboundKey(b.lotDate || b.inboundDate);
+      if (ka !== kb) return ka < kb ? -1 : 1;
+      return (a.expiryDate || '') < (b.expiryDate || '') ? -1 : 1;
+    });
+    sorted.forEach((r, i) => {
+      r.burnRank = i + 1;
+    });
+    // FEFO 역전: 1순위보다 빠른 유통기한을 가진 후순위 LOT 존재 여부
+    const firstExp = sorted[0].expiryDate || '';
+    sorted.forEach((r, i) => {
+      r.fefoWarn = i > 0 && !!firstExp && !!r.expiryDate && r.expiryDate < firstExp;
+    });
+  });
+  return rows;
+}
+
 const WAREHOUSES = ['냉장1', '냉장2', '냉동', '상온', '부자재'];
 const ITEM_TYPES = ['원자재', '부자재', '반제품', '완제품'];
 
@@ -99,6 +150,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     whName: '상온',
     vendor: '평화영농조합',
     itemCode: 'M10001',
+    lotNo: 'LOT-261030-01', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '곡류',
     itemName: '신동진 햅쌀 (1등급)', orderSupplier: '', orderDays: 0,
@@ -128,6 +180,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     whName: '상온',
     vendor: '오뚜기',
     itemCode: 'M10002',
+    lotNo: 'LOT-261030-02', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '조미료',
     itemName: '오뚜기 골드마요네즈', orderSupplier: '', orderDays: 0,
@@ -157,6 +210,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     whName: '상온',
     vendor: '동원',
     itemCode: 'M10003',
+    lotNo: 'LOT-261030-03', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '수산가공',
     itemName: '동원 참치통조림 살코기', orderSupplier: '', orderDays: 0,
@@ -186,6 +240,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     whName: '상온',
     vendor: '농심태경',
     itemCode: 'M10004',
+    lotNo: 'LOT-261030-04', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '건어물',
     itemName: '삼각김밥용 조미김', orderSupplier: '', orderDays: 0,
@@ -215,6 +270,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     whName: '부자재',
     vendor: '글로벌코리아',
     itemCode: 'M20001',
+    lotNo: 'LOT-261030-05', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '부자재',
     category: '포장재',
     itemName: '삼각김밥 삼면포장필름', orderSupplier: '', orderDays: 0,
@@ -244,6 +300,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     whName: '부자재',
     vendor: '두레',
     itemCode: 'M20002',
+    lotNo: 'LOT-261030-06', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '부자재',
     category: '용기',
     itemName: '11찬도시락 2단 트레이', orderSupplier: '', orderDays: 0,
@@ -273,6 +330,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     whName: '냉장1',
     vendor: '한성',
     itemCode: 'M10010',
+    lotNo: 'LOT-261030-07', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '축산물',
     itemName: '국내산 돈육 전지 (슬라이스)', orderSupplier: '', orderDays: 0,
@@ -302,6 +360,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     whName: '냉장1',
     vendor: 'CJ',
     itemCode: 'M10011',
+    lotNo: 'LOT-261030-08', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '축산물',
     itemName: 'CJ 델리햄 슬라이스', orderSupplier: '', orderDays: 0,
@@ -331,6 +390,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     whName: '냉장2',
     vendor: '한울(네트웍스)',
     itemCode: 'M10020',
+    lotNo: 'LOT-261030-09', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '채소류',
     itemName: '세척 당근채 (신선편의)', orderSupplier: '', orderDays: 0,
@@ -360,6 +420,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     whName: '냉장2',
     vendor: '한울(네트웍스)',
     itemCode: 'M10021',
+    lotNo: 'LOT-261030-10', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '채소류',
     itemName: '양상추 (탈수완료)', orderSupplier: '', orderDays: 0,
@@ -389,6 +450,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     whName: '냉동',
     vendor: '현대그린푸드',
     itemCode: 'M10030',
+    lotNo: 'LOT-261030-11', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '냉동가공',
     itemName: '숯불바비큐 패티 (80g)', orderSupplier: '', orderDays: 0,
@@ -418,6 +480,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     whName: '냉동',
     vendor: '현대그린푸드',
     itemCode: 'M10031',
+    lotNo: 'LOT-261030-12', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '원자재',
     category: '냉동가공',
     itemName: '케이준 치킨텐더 (가공)', orderSupplier: '', orderDays: 0,
@@ -447,6 +510,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     whName: '상온',
     vendor: '당사',
     itemCode: 'P10001',
+    lotNo: 'LOT-261030-13', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '완제품',
     category: '삼각김밥',
     itemName: '참치마요삼각김밥', orderSupplier: '', orderDays: 0,
@@ -476,6 +540,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     whName: '상온',
     vendor: '당사',
     itemCode: 'P10004',
+    lotNo: 'LOT-261030-14', burnRank: 1, fefoWarn: false, lotDate: '',
     itemType: '완제품',
     category: '도시락',
     itemName: '11가지찬도시락', orderSupplier: '', orderDays: 0,
@@ -572,12 +637,14 @@ export const StockLookupView: React.FC = () => {
               orderSupplier: o?.supplier || '',
               orderDays: o ? Number(o.days) || 0 : 0,
               itemCode: inv.productCode || inv.product?.productCode || '',
+              lotNo: inv.lotNo || '',
+              lotDate: inv.lastInDate || '',
               itemType: inv.category || inv.product?.category || '원자재',
               category: inv.product?.kind || '원부자재',
               itemName: name,
               spec: inv.product?.spec || '',
-              unit: inv.unit || inv.product?.unit || 'kg',
-              inboundDate: inv.lastInDate ? String(inv.lastInDate).slice(5) : inv.product?.partner?.leadTime ? `D+${inv.product.partner.leadTime}` : 'D+2',
+        unit: inv.unit || inv.product?.unit || 'kg',
+        inboundDate: inv.lastInDate ? String(inv.lastInDate).slice(5) : inv.product?.partner?.leadTime ? `D+${inv.product.partner.leadTime}` : 'D+2',
               expiryDate: inv.expiryDate || '',
               orderDay: inv.product?.partner?.orderDay || '',
                 dailyUsage: dailyU,
@@ -593,6 +660,8 @@ export const StockLookupView: React.FC = () => {
                 status: calcStockStatus(current, safety),
                 stockDays: calcStockDays(exJ, exI, dailyU),
                 exJ, exI, exH: dailyU,
+                burnRank: 0,
+                fefoWarn: false,
                 unitPrice: uprice,
                 totalAmount: current * uprice,
               });
@@ -619,7 +688,9 @@ export const StockLookupView: React.FC = () => {
                 orderSupplier: o.supplier || '',
                 orderDays: Number(o.days) || 0,
                 itemCode: o.itemId || '',
-                itemType: '원자재',
+                lotNo: '',
+                lotDate: '',
+                itemType: '원재료',
                 category: '원부자재',
                 itemName: o.name,
                 spec: '',
@@ -639,6 +710,8 @@ export const StockLookupView: React.FC = () => {
                 shortage: current - autoSafety,
                 status: calcStockStatus(current, autoSafety),
                 stockDays: calcStockDays(current, Number(o.incoming) || 0, daily),
+                burnRank: 0,
+                fefoWarn: false,
                 exJ: current,
                 exI: Number(o.incoming) || 0,
                 exH: daily,
@@ -650,7 +723,7 @@ export const StockLookupView: React.FC = () => {
               added += 1;
             });
           }
-          setData(loaded);
+          setData(applyBurnRank(loaded));
           const dirty = new Set<number>(freshIds);
           setDirtyRowIds(dirty);
           setNewRowIds(freshIds);
@@ -683,8 +756,8 @@ export const StockLookupView: React.FC = () => {
 
   // 셀 직접입력 시 연계 자동 계산 및 변경점 추적
   const handleCellChange = (rowId: any, columnKey: string, newValue: any) => {
-    setData((prev) =>
-      prev.map((item, idx) => {
+    setData((prev) => {
+      const next = prev.map((item, idx) => {
         const match = item.id === rowId || idx === rowId;
         if (!match) return item;
 
@@ -719,8 +792,13 @@ export const StockLookupView: React.FC = () => {
         updated.totalAmount = currentStock * unitPrice;
 
         return updated;
-      })
-    );
+      });
+      // 유통기한 수정 시 FEFO 역전 여부만 재계산
+      if (columnKey === 'expiryDate') {
+        return applyBurnRank(next);
+      }
+      return next;
+    });
     setDirtyRowIds((prev) => new Set(prev).add(Number(rowId)));
   };
 
@@ -846,9 +924,13 @@ export const StockLookupView: React.FC = () => {
               id: tempId--,
               whName: sheet,
               vendor,
+              lotNo: '',
+              lotDate: '',
               orderSupplier: '',
               orderDays: 0,
               itemCode: itemId,
+              burnRank: 0,
+              fefoWarn: false,
               itemType: sheet === '부자재' ? '부자재' : '원자재',
               category: '원부자재',
               itemName: name,
@@ -889,7 +971,7 @@ export const StockLookupView: React.FC = () => {
         alert('엑셀에서 품목 행을 찾지 못했습니다. 일일 재고조사표 양식인지 확인하세요.');
         return;
       }
-      setData(next);
+      setData(applyBurnRank(next));
       setDirtyRowIds(dirtyIds);
       setNewRowIds(freshIds);
       setReviewList(review);
@@ -1113,6 +1195,15 @@ export const StockLookupView: React.FC = () => {
       editable: false,
     },
     {
+      key: 'lotNo',
+      label: 'LOT번호',
+      width: '120px',
+      align: 'center',
+      sortable: true,
+      filterable: true,
+      editable: false,
+    },
+    {
       key: 'itemType',
       label: '구분',
       width: '70px',
@@ -1249,6 +1340,26 @@ export const StockLookupView: React.FC = () => {
           {Number(v).toLocaleString()}
         </span>
       ),
+    },
+    {
+      key: 'burnRank',
+      label: '소진순위',
+      width: '80px',
+      align: 'center',
+      sortable: true,
+      editable: false,
+      render: (v, row) => {
+        const circled = ['', '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨'];
+        const label = Number(v) > 0 && Number(v) <= 9 ? circled[Number(v)] : `${v}순위`;
+        return (
+          <span className="inline-flex items-center gap-1" title={row.fefoWarn ? '나중 LOT 유통기한이 더 빠름 (FEFO 역전 주의)' : `소진 ${v}순위 (선입선출)`}>
+            <span className="inline-block px-1.5 py-0.2 text-[12px] font-black rounded bg-indigo-50 text-indigo-700 border border-indigo-300">
+              {label}
+            </span>
+            {row.fefoWarn && <span className="text-[13px]" title="FEFO 역전: 나중 LOT이 먼저 상함">⚠️</span>}
+          </span>
+        );
+      },
     },
     {
       key: 'stockDays',
