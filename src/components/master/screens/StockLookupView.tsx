@@ -58,6 +58,7 @@ interface StockItem {
   safetyStock: number;
   shortage: number; // currentStock - safetyStock (negative = danger)
   status: string; // 품절/부족/과잉/정상
+  stockDays: number; // 재고유지일 = 현재고(봉) / (일사용량(박스) x 입수량), 소수1자리
   unitPrice: number;
   totalAmount: number; // currentStock * unitPrice
 }
@@ -68,6 +69,12 @@ export function calcStockStatus(current: number, safety: number): string {
   if (current < safety) return '부족';
   if (safety > 0 && current >= safety * 3) return '과잉';
   return '정상';
+}
+
+/** 재고유지일(일) = 현재고(봉) / (일사용량(박스) x 입수량), 소수1자리. 계산불가 -1 */
+export function calcStockDays(current: number, dailyBox: number, pack: number): number {
+  if (!(dailyBox > 0) || !(pack > 0)) return -1;
+  return Math.round((current / (dailyBox * pack)) * 10) / 10;
 }
 
 /** 유통기한 임박일수 (YYYY-MM-DD만 판정, 파싱불가 -1) */
@@ -107,6 +114,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     currentStock: 3350,
     safetyStock: 2000,
     status: '정상',
+        stockDays: 25.8,
         shortage: 1350,
     unitPrice: 2850,
     totalAmount: 9547500,
@@ -134,6 +142,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     currentStock: 450,
     safetyStock: 300,
     status: '정상',
+        stockDays: 14.1,
         shortage: 150,
     unitPrice: 4200,
     totalAmount: 1890000,
@@ -161,6 +170,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     currentStock: 80,
     safetyStock: 150,
     status: '부족',
+        stockDays: 7.4,
         shortage: -70, // 부족!
     unitPrice: 11500,
     totalAmount: 920000,
@@ -188,6 +198,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     currentStock: 37000,
     safetyStock: 20000,
     status: '정상',
+        stockDays: 3.0,
         shortage: 17000,
     unitPrice: 48,
     totalAmount: 1776000,
@@ -215,6 +226,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     currentStock: 33,
     safetyStock: 20,
     status: '정상',
+        stockDays: 82.5,
         shortage: 13,
     unitPrice: 85000,
     totalAmount: 2805000,
@@ -242,6 +254,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     currentStock: 1400,
     safetyStock: 2000,
     status: '부족',
+        stockDays: 1.7,
         shortage: -600, // 부족!
     unitPrice: 380,
     totalAmount: 532000,
@@ -269,6 +282,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     currentStock: 930,
     safetyStock: 500,
     status: '정상',
+        stockDays: 11.3,
         shortage: 430,
     unitPrice: 8900,
     totalAmount: 8277000,
@@ -296,6 +310,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     currentStock: 60,
     safetyStock: 120,
     status: '부족',
+        stockDays: 1.4,
         shortage: -60, // 부족!
     unitPrice: 12800,
     totalAmount: 768000,
@@ -323,6 +338,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     currentStock: 180,
     safetyStock: 100,
     status: '정상',
+        stockDays: 7.1,
         shortage: 80,
     unitPrice: 4100,
     totalAmount: 738000,
@@ -350,6 +366,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     currentStock: 50,
     safetyStock: 60,
     status: '부족',
+        stockDays: 2.6,
         shortage: -10, // 부족!
     unitPrice: 5300,
     totalAmount: 265000,
@@ -377,6 +394,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     currentStock: 640,
     safetyStock: 400,
     status: '정상',
+        stockDays: 12.7,
         shortage: 240,
     unitPrice: 9700,
     totalAmount: 6208000,
@@ -404,6 +422,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     currentStock: 260,
     safetyStock: 300,
     status: '부족',
+        stockDays: 19.3,
         shortage: -40, // 부족!
     unitPrice: 10500,
     totalAmount: 2730000,
@@ -431,6 +450,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     currentStock: 1800,
     safetyStock: 800,
     status: '정상',
+        stockDays: 15.0,
         shortage: 1000,
     unitPrice: 650,
     totalAmount: 1170000,
@@ -458,6 +478,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     currentStock: 550,
     safetyStock: 300,
     status: '정상',
+        stockDays: 12.2,
         shortage: 250,
     unitPrice: 2800,
     totalAmount: 1540000,
@@ -517,6 +538,7 @@ export const StockLookupView: React.FC = () => {
             const box = Math.floor(current / pack);
             const piece = Math.round((current % pack) * 10) / 10;
             const uprice = o && Number(o.bagPrice) > 0 ? Number(o.bagPrice) : price;
+            const dailyU = o ? Number(o.dailyUsage) || 0 : 0;
             if (o) merged += 1;
             loaded.push({
               id: inv.id || idx + 1,
@@ -533,17 +555,18 @@ export const StockLookupView: React.FC = () => {
               inboundDate: inv.lastInDate ? String(inv.lastInDate).slice(5) : inv.product?.partner?.leadTime ? `D+${inv.product.partner.leadTime}` : 'D+2',
               expiryDate: inv.expiryDate || '',
               orderDay: inv.product?.partner?.orderDay || '',
-              dailyUsage: o ? Number(o.dailyUsage) || 0 : 0,
-              packUnit: pack,
-              boxQty: box,
-              pieceQty: piece,
-              prevStock: current,
-              inQty: o ? Number(o.incoming) || 0 : 0,
-              outQty: 0,
-              currentStock: current,
-              safetyStock: safety,
-              shortage: current - safety,
-              status: calcStockStatus(current, safety),
+                dailyUsage: dailyU,
+                packUnit: pack,
+                boxQty: box,
+                pieceQty: piece,
+                prevStock: current,
+                inQty: o ? Number(o.incoming) || 0 : 0,
+                outQty: 0,
+                currentStock: current,
+                safetyStock: safety,
+                shortage: current - safety,
+                status: calcStockStatus(current, safety),
+                stockDays: calcStockDays(current, dailyU, pack),
               unitPrice: uprice,
               totalAmount: current * uprice,
             });
@@ -588,6 +611,7 @@ export const StockLookupView: React.FC = () => {
                 safetyStock: autoSafety,
                 shortage: current - autoSafety,
                 status: calcStockStatus(current, autoSafety),
+                stockDays: calcStockDays(current, daily, pack),
                 unitPrice: price,
                 totalAmount: current * price,
               };
@@ -659,6 +683,7 @@ export const StockLookupView: React.FC = () => {
         // 과부족 및 재고금액 실시간 자동 계산
         updated.shortage = currentStock - safetyStock;
         updated.status = calcStockStatus(currentStock, safetyStock);
+        updated.stockDays = calcStockDays(currentStock, Number(updated.dailyUsage) || 0, Number(updated.packUnit) || 0);
         updated.totalAmount = currentStock * unitPrice;
 
         return updated;
@@ -741,6 +766,7 @@ export const StockLookupView: React.FC = () => {
             exist.safetyStock = newSafety;
             exist.shortage = current - newSafety;
             exist.status = calcStockStatus(current, newSafety);
+            exist.stockDays = calcStockDays(current, exist.dailyUsage, exist.packUnit);
             if (changed) {
               updated += 1;
               if (autoSafety > 0) autoFilled += 1;
@@ -777,6 +803,7 @@ export const StockLookupView: React.FC = () => {
                 safetyStock: newSafety,
                 shortage: current - newSafety,
                 status: calcStockStatus(current, newSafety),
+                stockDays: calcStockDays(current, daily, pack),
                 unitPrice: price,
                 totalAmount: current * price,
               };
@@ -1144,6 +1171,19 @@ export const StockLookupView: React.FC = () => {
           }`}
         >
           {Number(v).toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      key: 'stockDays',
+      label: '재고유지일',
+      width: '85px',
+      align: 'right',
+      sortable: true,
+      editable: false,
+      render: (v, row) => (
+        <span className={`font-mono ${Number(row.dailyUsage) > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
+          {Number(row.dailyUsage) > 0 && Number(v) >= 0 ? `${Number(v).toFixed(1)}일` : '-'}
         </span>
       ),
     },
