@@ -36,6 +36,8 @@ interface StockItem {
   id: number;
   whName: string;
   vendor: string;
+  orderSupplier: string; // 발주처 (발주서 정본 거래처명)
+  orderDays: number; // 발주일수 (발주서 G열)
   itemCode: string;
   itemType: string;
   category: string;
@@ -70,7 +72,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemCode: 'M10001',
     itemType: '원자재',
     category: '곡류',
-    itemName: '신동진 햅쌀 (1등급)',
+    itemName: '신동진 햅쌀 (1등급)', orderSupplier: '', orderDays: 0,
     spec: '20kg/포',
     unit: 'kg',
     inboundDate: 'D+1',
@@ -96,7 +98,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemCode: 'M10002',
     itemType: '원자재',
     category: '조미료',
-    itemName: '오뚜기 골드마요네즈',
+    itemName: '오뚜기 골드마요네즈', orderSupplier: '', orderDays: 0,
     spec: '3.2kg/통',
     unit: 'kg',
     inboundDate: 'D+2',
@@ -122,7 +124,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemCode: 'M10003',
     itemType: '원자재',
     category: '수산가공',
-    itemName: '동원 참치통조림 살코기',
+    itemName: '동원 참치통조림 살코기', orderSupplier: '', orderDays: 0,
     spec: '1.88kg/캔',
     unit: 'kg',
     inboundDate: 'D+2',
@@ -148,7 +150,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemCode: 'M10004',
     itemType: '원자재',
     category: '건어물',
-    itemName: '삼각김밥용 조미김',
+    itemName: '삼각김밥용 조미김', orderSupplier: '', orderDays: 0,
     spec: '1000매/속',
     unit: '매',
     inboundDate: 'D+2',
@@ -174,7 +176,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemCode: 'M20001',
     itemType: '부자재',
     category: '포장재',
-    itemName: '삼각김밥 삼면포장필름',
+    itemName: '삼각김밥 삼면포장필름', orderSupplier: '', orderDays: 0,
     spec: '5000m/roll',
     unit: 'roll',
     inboundDate: 'D+2',
@@ -200,7 +202,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemCode: 'M20002',
     itemType: '부자재',
     category: '용기',
-    itemName: '11찬도시락 2단 트레이',
+    itemName: '11찬도시락 2단 트레이', orderSupplier: '', orderDays: 0,
     spec: '400ea/box',
     unit: 'ea',
     inboundDate: 'D+2',
@@ -226,7 +228,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemCode: 'M10010',
     itemType: '원자재',
     category: '축산물',
-    itemName: '국내산 돈육 전지 (슬라이스)',
+    itemName: '국내산 돈육 전지 (슬라이스)', orderSupplier: '', orderDays: 0,
     spec: '10kg/box',
     unit: 'kg',
     inboundDate: 'D+1',
@@ -252,7 +254,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemCode: 'M10011',
     itemType: '원자재',
     category: '축산물',
-    itemName: 'CJ 델리햄 슬라이스',
+    itemName: 'CJ 델리햄 슬라이스', orderSupplier: '', orderDays: 0,
     spec: '1kg/pack',
     unit: 'kg',
     inboundDate: 'D+1',
@@ -278,7 +280,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemCode: 'M10020',
     itemType: '원자재',
     category: '채소류',
-    itemName: '세척 당근채 (신선편의)',
+    itemName: '세척 당근채 (신선편의)', orderSupplier: '', orderDays: 0,
     spec: '5kg/bag',
     unit: 'kg',
     inboundDate: 'D+1',
@@ -304,7 +306,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemCode: 'M10021',
     itemType: '원자재',
     category: '채소류',
-    itemName: '양상추 (탈수완료)',
+    itemName: '양상추 (탈수완료)', orderSupplier: '', orderDays: 0,
     spec: '5kg/bag',
     unit: 'kg',
     inboundDate: 'D+1',
@@ -330,7 +332,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemCode: 'M10030',
     itemType: '원자재',
     category: '냉동가공',
-    itemName: '숯불바비큐 패티 (80g)',
+    itemName: '숯불바비큐 패티 (80g)', orderSupplier: '', orderDays: 0,
     spec: '8kg/box',
     unit: 'kg',
     inboundDate: 'D+2',
@@ -356,7 +358,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemCode: 'M10031',
     itemType: '원자재',
     category: '냉동가공',
-    itemName: '케이준 치킨텐더 (가공)',
+    itemName: '케이준 치킨텐더 (가공)', orderSupplier: '', orderDays: 0,
     spec: '5kg/box',
     unit: 'kg',
     inboundDate: 'D+2',
@@ -382,7 +384,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemCode: 'P10001',
     itemType: '완제품',
     category: '삼각김밥',
-    itemName: '참치마요삼각김밥',
+    itemName: '참치마요삼각김밥', orderSupplier: '', orderDays: 0,
     spec: '110g',
     unit: 'ea',
     inboundDate: 'D+1',
@@ -408,7 +410,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     itemCode: 'P10004',
     itemType: '완제품',
     category: '도시락',
-    itemName: '11가지찬도시락',
+    itemName: '11가지찬도시락', orderSupplier: '', orderDays: 0,
     spec: '430g',
     unit: 'ea',
     inboundDate: 'D+1',
@@ -443,48 +445,127 @@ export const StockLookupView: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [mergeInfo, setMergeInfo] = useState('');
+
   const loadStockData = () => {
-    fetch('/api/inventory/stock')
-      .then((res) => res.json())
-      .then((json) => {
+    setMergeInfo('불러오는 중...');
+    Promise.all([
+      fetch('/api/inventory/stock').then((res) => res.json()),
+      fetch('/api/gfs/order-sheet').then((res) => res.json()).catch(() => null),
+    ])
+      .then(([json, orderJson]) => {
         if (json.success && json.data && json.data.length > 0) {
-          const loaded: StockItem[] = json.data.map((inv: any, idx: number) => {
+          // 발주서 정본 맵 (품명 정규화 기준) — 엑셀 우선
+          const orderByNorm = new Map<string, any>();
+          if (orderJson?.success && Array.isArray(orderJson.data?.rows)) {
+            orderJson.data.rows.forEach((r: any) => {
+              const k = normName(r.name);
+              if (k && !orderByNorm.has(k)) orderByNorm.set(k, r);
+            });
+          }
+          let merged = 0;
+          let added = 0;
+          const loaded: StockItem[] = [];
+          const seen = new Set<string>();
+          json.data.forEach((inv: any, idx: number) => {
             const safety = inv.product?.safetyStockQty || 100;
-            const current = inv.currentQty || 0;
             const price = inv.unitPrice || (inv.currentQty > 0 ? inv.stockAmount / inv.currentQty : 2000);
-            const pack = inv.product?.boxQty || 1;
+            const name = inv.productName || inv.product?.name || '';
+            const norm = normName(name);
+            seen.add(norm);
+            // 엑셀 우선: 정본에 있으면 엑셀값으로 표시 (DB에만 있는 행은 그대로)
+            const o = norm ? orderByNorm.get(norm) : undefined;
+            const current = o && Number(o.currentStock) > 0 ? Number(o.currentStock) : inv.currentQty || 0;
+            const pack = (o && Number(o.packUnit) > 0 ? Number(o.packUnit) : 0) || inv.product?.boxQty || 1;
             const box = Math.floor(current / pack);
             const piece = Math.round((current % pack) * 10) / 10;
-            return {
+            const uprice = o && Number(o.bagPrice) > 0 ? Number(o.bagPrice) : price;
+            if (o) merged += 1;
+            loaded.push({
               id: inv.id || idx + 1,
               whName: inv.warehouse || '상온',
               vendor: inv.product?.partner?.name || inv.product?.partnerId || '',
+              orderSupplier: o?.supplier || '',
+              orderDays: o ? Number(o.days) || 0 : 0,
               itemCode: inv.productCode || inv.product?.productCode || '',
               itemType: inv.category || inv.product?.category || '원자재',
               category: inv.product?.kind || '원부자재',
-              itemName: inv.productName || inv.product?.name || '',
+              itemName: name,
               spec: inv.product?.spec || '',
               unit: inv.unit || inv.product?.unit || 'kg',
               inboundDate: inv.lastInDate ? String(inv.lastInDate).slice(5) : inv.product?.partner?.leadTime ? `D+${inv.product.partner.leadTime}` : 'D+2',
               expiryDate: inv.expiryDate || '',
               orderDay: inv.product?.partner?.orderDay || '',
-              dailyUsage: 0,
+              dailyUsage: o ? Number(o.dailyUsage) || 0 : 0,
               packUnit: pack,
               boxQty: box,
               pieceQty: piece,
               prevStock: current,
-              inQty: 0,
+              inQty: o ? Number(o.incoming) || 0 : 0,
               outQty: 0,
               currentStock: current,
               safetyStock: safety,
               shortage: current - safety,
-              unitPrice: price,
-              totalAmount: current * price,
-            };
+              unitPrice: uprice,
+              totalAmount: current * uprice,
+            });
           });
+          // 엑셀에만 있는 품목은 신규행으로 추가 (저장 시 품목 자동생성)
+          let tempId = -(Date.now() % 1000000) - 1;
+          const freshIds = new Set<number>();
+          if (orderByNorm.size > 0) {
+            orderByNorm.forEach((o: any, norm: string) => {
+              if (seen.has(norm) || !o.name) return;
+              const pack = Number(o.packUnit) > 0 ? Number(o.packUnit) : 1;
+              const current = Number(o.currentStock) || 0;
+              const price = Number(o.bagPrice) || 0;
+              const box = Math.floor(current / pack);
+              const piece = Math.round((current % pack) * 10) / 10;
+              const daily = Number(o.dailyUsage) || 0;
+              const leadM = /D-(\d+)/.exec(o.supplier || '');
+              const autoSafety = calcSafetyStock(daily, pack, leadM ? Math.max(1, parseInt(leadM[1], 10)) : 2);
+              const row: StockItem = {
+                id: tempId--,
+                whName: o.warehouse || '상온',
+                vendor: o.vendor || '',
+                orderSupplier: o.supplier || '',
+                orderDays: Number(o.days) || 0,
+                itemCode: o.itemId || '',
+                itemType: '원자재',
+                category: '원부자재',
+                itemName: o.name,
+                spec: '',
+                unit: 'box',
+                inboundDate: '',
+                expiryDate: '',
+                orderDay: '',
+                dailyUsage: daily,
+                packUnit: pack,
+                boxQty: box,
+                pieceQty: piece,
+                prevStock: current,
+                inQty: Number(o.incoming) || 0,
+                outQty: 0,
+                currentStock: current,
+                safetyStock: autoSafety,
+                shortage: current - autoSafety,
+                unitPrice: price,
+                totalAmount: current * price,
+              };
+              loaded.push(row);
+              freshIds.add(row.id);
+              added += 1;
+            });
+          }
           setData(loaded);
-          setDirtyRowIds(new Set());
-          setNewRowIds(new Set());
+          const dirty = new Set<number>(freshIds);
+          setDirtyRowIds(dirty);
+          setNewRowIds(freshIds);
+          setMergeInfo(
+            orderByNorm.size > 0
+              ? `정본 병합: ${merged}건 반영 · 신규 ${added}건`
+              : '정본 없음 (DB만 표시)'
+          );
         }
       })
       .catch((err) => console.error('Failed to load stock data', err));
@@ -633,6 +714,8 @@ export const StockLookupView: React.FC = () => {
               id: tempId--,
               whName: sheet,
               vendor,
+              orderSupplier: '',
+              orderDays: 0,
               itemCode: itemId,
               itemType: sheet === '부자재' ? '부자재' : '원자재',
               category: '원부자재',
@@ -792,7 +875,8 @@ export const StockLookupView: React.FC = () => {
         const matchCode = item.itemCode.toLowerCase().includes(kw);
         const matchCat = item.category.toLowerCase().includes(kw);
         const matchVendor = (item.vendor || '').toLowerCase().includes(kw);
-        if (!matchName && !matchCode && !matchCat && !matchVendor) return false;
+        const matchSupplier = (item.orderSupplier || '').toLowerCase().includes(kw);
+        if (!matchName && !matchCode && !matchCat && !matchVendor && !matchSupplier) return false;
       }
       return true;
     });
@@ -838,6 +922,15 @@ export const StockLookupView: React.FC = () => {
       key: 'vendor',
       label: '거래처',
       width: '140px',
+      align: 'left',
+      sortable: true,
+      filterable: true,
+      editable: false,
+    },
+    {
+      key: 'orderSupplier',
+      label: '발주처',
+      width: '170px',
       align: 'left',
       sortable: true,
       filterable: true,
@@ -1142,7 +1235,7 @@ export const StockLookupView: React.FC = () => {
             <div className="relative">
               <input
                 type="text"
-                placeholder="품명/품번/품종/거래처 검색"
+                placeholder="품명/품번/품종/거래처/발주처 검색"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
                 className="bg-white border border-gray-400 rounded px-2 py-0.5 text-[12px] w-44"
@@ -1171,6 +1264,7 @@ export const StockLookupView: React.FC = () => {
           )}
           <span className="text-[12px] font-bold text-gray-700">
             데이터수: <span className="text-blue-700">{filteredData.length.toLocaleString()}</span>
+            {mergeInfo && <span className="ml-2 text-[11px] font-medium text-emerald-700">· {mergeInfo}</span>}
           </span>
           <button
             onClick={() => {
