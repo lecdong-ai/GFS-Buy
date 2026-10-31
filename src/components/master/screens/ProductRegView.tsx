@@ -168,8 +168,9 @@ export const ProductRegView: React.FC = () => {
     setIsSaving(true);
     try {
       const targetProducts = products.filter((p) => dirtyRowIds.has(p.id));
+      let bomEnsured = 0;
       for (const p of targetProducts) {
-        await fetch('/api/master/product', {
+        const res = await fetch('/api/master/product', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -184,9 +185,36 @@ export const ProductRegView: React.FC = () => {
             remark: p.remark,
           }),
         });
+        const json = await res.json().catch(() => null);
+        // 신메뉴(완성품/반제품) 등록 시 BOM 헤더 자동생성 (없을 때만, v1.0)
+        const savedId = json?.data?.id;
+        if (json?.success && savedId && (p.category === '완성품' || p.category === '반제품')) {
+          try {
+            const chk = await fetch(`/api/master/bom?productId=${savedId}`).then((r) => r.json()).catch(() => null);
+            if (chk?.success && Array.isArray(chk.data) && chk.data.length === 0) {
+              await fetch('/api/master/bom', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  parentProductId: savedId,
+                  version: '1.0',
+                  effectiveDate: new Date().toISOString().slice(0, 10),
+                  details: [],
+                  remark: '신메뉴 자동생성',
+                }),
+              });
+              bomEnsured += 1;
+            }
+          } catch {
+            /* BOM 자동생성은 부가 기능이라 실패해도 저장 계속 */
+          }
+        }
       }
       setDirtyRowIds(new Set());
-      alert(`총 ${targetProducts.length}건의 품목 마스터 정보가 데이터베이스에 성공적으로 저장되었습니다.`);
+      alert(
+        `총 ${targetProducts.length}건의 품목 마스터 정보가 데이터베이스에 성공적으로 저장되었습니다.` +
+          (bomEnsured > 0 ? `\n신메뉴 BOM ${bomEnsured}건 자동생성(v1.0) — BOM(일반)에서 구성품을 등록하세요.` : '')
+      );
     } catch (err: any) {
       alert('저장 중 오류 발생: ' + err.message);
     } finally {

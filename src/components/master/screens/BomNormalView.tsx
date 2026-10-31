@@ -26,6 +26,7 @@ interface BomParentProduct {
 
 interface BomChildMaterial {
   id: number;
+  childProductId?: number;
   used: boolean;
   partId: string;
   category: string;
@@ -71,6 +72,10 @@ export const BomNormalView: React.FC = () => {
   const [parents, setParents] = useState<BomParentProduct[]>(SAMPLE_BOM_PARENTS);
   const [selectedParentId, setSelectedParentId] = useState<number>(1);
   const [childrenMap, setChildrenMap] = useState<Record<number, BomChildMaterial[]>>(SAMPLE_BOM_CHILDREN);
+  const [bomHeaders, setBomHeaders] = useState<any[]>([]);
+  const [versionsMap, setVersionsMap] = useState<Record<number, string[]>>({});
+  const [version, setVersion] = useState<string>('1.0');
+  const [copySourceId, setCopySourceId] = useState<string>('');
 
   useEffect(() => {
     fetch('/api/master/bom')
@@ -95,13 +100,26 @@ export const BomNormalView: React.FC = () => {
             remark: b.remark || '',
           }));
           setParents(loadedParents);
+          setBomHeaders(json.data);
+
+          // 버전 목록 (부모별)
+          const vMap: Record<number, string[]> = {};
+          json.data.forEach((b: any) => {
+            const pId = b.parentProduct?.id;
+            if (pId) {
+              if (!vMap[pId]) vMap[pId] = [];
+              if (b.version && !vMap[pId].includes(b.version)) vMap[pId].push(b.version);
+            }
+          });
+          setVersionsMap((prev) => ({ ...prev, ...vMap }));
 
           const loadedChildren: Record<number, BomChildMaterial[]> = {};
           json.data.forEach((b: any, idx: number) => {
             const pId = b.parentProduct?.id || idx + 1;
-            if (b.details && b.details.length > 0) {
+            if (b.details && b.details.length > 0 && !loadedChildren[pId]) {
               loadedChildren[pId] = b.details.map((d: any) => ({
                 id: d.id,
+                childProductId: d.childProductId,
                 used: true,
                 partId: d.childProduct?.productCode || '',
                 category: d.childProduct?.category || '원재료',
@@ -128,6 +146,15 @@ export const BomNormalView: React.FC = () => {
       .catch((err) => console.error('Failed to load BOM', err));
   }, []);
 
+  const toApiDetails = (children: BomChildMaterial[]) =>
+    children.map((c) => ({
+      childProductId: c.childProductId || c.id,
+      unitQty: c.unitInputQty,
+      unit: c.partUnit,
+      yieldRate: c.recipeYield,
+      remark: c.remark,
+    }));
+
   const handleSave = async () => {
     try {
       const children = childrenMap[selectedParentId] || [];
@@ -136,24 +163,167 @@ export const BomNormalView: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           parentProductId: selectedParentId,
-          details: children.map((c) => ({
-            childProductId: c.id,
-            unitQty: c.unitInputQty,
-            unit: c.partUnit,
-            yieldRate: c.recipeYield,
-            remark: c.remark,
-          })),
+          version,
+          effectiveDate: new Date().toISOString().slice(0, 10),
+          details: toApiDetails(children),
         }),
       });
       const json = await res.json();
       if (json.success) {
-        alert('BOM이 데이터베이스에 안전하게 저장되었습니다.');
+        setVersionsMap((prev) => {
+          const cur = prev[selectedParentId] || [];
+          return cur.includes(version) ? prev : { ...prev, [selectedParentId]: [...cur, version] };
+        });
+        alert(`BOM이 데이터베이스에 안전하게 저장되었습니다. (v${version})`);
       } else {
         alert('저장 실패: ' + json.error);
       }
     } catch (err: any) {
       alert('저장 중 오류: ' + err.message);
     }
+  };
+
+  // 버전 전환: 해당 버전 상세로 하단 그리드 교체
+  const handleVersionChange = (v: string) => {
+    setVersion(v);
+    const header = bomHeaders.find(
+      (b: any) => (b.parentProduct?.id === selectedParentId) && b.version === v
+    );
+    if (header?.details) {
+      const mapped: BomChildMaterial[] = header.details.map((d: any) => ({
+        id: d.id,
+        childProductId: d.childProductId,
+        used: true,
+        partId: d.childProduct?.productCode || '',
+        category: d.childProduct?.category || '원재료',
+        partName: d.childProduct?.name || '',
+        partSpec: d.childProduct?.spec || '',
+        partUnit: d.unit || d.childProduct?.unit || 'kg',
+        recipeYield: d.yieldRate || 100,
+        prodInputQty: d.unitQty * 100,
+        prodActualQty: d.unitQty * 100,
+        prodCost: d.unitQty * 100 * 2000,
+        unitInputQty: d.unitQty,
+        unitActualQty: d.unitQty,
+        unitCost: d.unitQty * 2000,
+        gyeName: d.gye?.name || '',
+        remark: d.remark || '',
+      }));
+      setChildrenMap((prev) => ({ ...prev, [selectedParentId]: mapped }));
+    } else if (v !== '1.0') {
+      setChildrenMap((prev) => ({ ...prev, [selectedParentId]: [] }));
+    }
+  };
+
+  // 새 버전 생성: 현재 구성을 다음 마이너 버전으로 복제 저장
+  const handleNewVersion = async () => {
+    const cur = versionsMap[selectedParentId] || ['1.0'];
+    const nums = cur.map((s) => parseFloat(s)).filter((n) => !isNaN(n));
+    const nextMinor = (Math.max(...nums, 1.0) + 0.1).toFixed(1);
+    const children = childrenMap[selectedParentId] || [];
+    if (children.length === 0) {
+      alert('복제할 구성품이 없습니다. 먼저 소요 원부자재를 등록하세요.');
+      return;
+    }
+    if (!children.every((c) => c.childProductId)) {
+      alert('DB 미등록 행(임시 추가분)이 있어 버전을 만들 수 없습니다. 먼저 [저장]으로 확정한 뒤 다시 시도하세요.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/master/bom', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          parentProductId: selectedParentId,
+          version: nextMinor,
+          effectiveDate: new Date().toISOString().slice(0, 10),
+          details: toApiDetails(children),
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        // 방금 저장한 버전을 로컬 헤더 목록에도 반영
+        setBomHeaders((prev) => [
+          ...prev,
+          {
+            version: nextMinor,
+            parentProduct: { id: selectedParentId },
+            details: children.map((c, i) => ({
+              id: Date.now() + i,
+              childProductId: c.childProductId || c.id,
+              unitQty: c.unitInputQty,
+              unit: c.partUnit,
+              yieldRate: c.recipeYield,
+              remark: c.remark,
+              childProduct: { productCode: c.partId, name: c.partName, spec: c.partSpec, unit: c.partUnit, category: c.category },
+              gye: { name: c.gyeName },
+            })),
+          },
+        ]);
+        setVersionsMap((prev) => ({
+          ...prev,
+          [selectedParentId]: [...(prev[selectedParentId] || ['1.0']), nextMinor],
+        }));
+        setVersion(nextMinor);
+        alert(`새 BOM 버전 v${nextMinor}이(가) 생성되었습니다.`);
+      } else {
+        alert('버전 생성 실패: ' + json.error);
+      }
+    } catch (err: any) {
+      alert('버전 생성 중 오류: ' + err.message);
+    }
+  };
+
+  // 유사메뉴 복사: 원본 제품의 구성품을 현재 제품에 복제 (저장은 [저장] 버튼으로 확정)
+  const handleCopyFrom = async () => {
+    const srcId = Number(copySourceId);
+    if (!srcId) {
+      alert('복사해올 원본 제품을 선택하세요.');
+      return;
+    }
+    if (srcId === selectedParentId) {
+      alert('자기 자신은 복사 원본이 될 수 없습니다.');
+      return;
+    }
+    let srcChildren = childrenMap[srcId];
+    if (!srcChildren) {
+      // DB에서 원본 BOM 조회
+      try {
+        const res = await fetch(`/api/master/bom?productId=${srcId}`);
+        const json = await res.json();
+        if (json.success && json.data?.[0]?.details) {
+          srcChildren = json.data[0].details.map((d: any) => ({
+            id: d.id,
+            childProductId: d.childProductId,
+            used: true,
+            partId: d.childProduct?.productCode || '',
+            category: d.childProduct?.category || '원재료',
+            partName: d.childProduct?.name || '',
+            partSpec: d.childProduct?.spec || '',
+            partUnit: d.unit || d.childProduct?.unit || 'kg',
+            recipeYield: d.yieldRate || 100,
+            prodInputQty: d.unitQty * 100,
+            prodActualQty: d.unitQty * 100,
+            prodCost: d.unitQty * 100 * 2000,
+            unitInputQty: d.unitQty,
+            unitActualQty: d.unitQty,
+            unitCost: d.unitQty * 2000,
+            gyeName: d.gye?.name || '',
+            remark: d.remark || '',
+          }));
+        }
+      } catch (err: any) {
+        alert('원본 BOM 조회 실패: ' + err.message);
+        return;
+      }
+    }
+    if (!srcChildren || srcChildren.length === 0) {
+      alert('원본 제품에 등록된 구성품이 없습니다.');
+      return;
+    }
+    const cloned = srcChildren.map((c, i) => ({ ...c, id: Date.now() + i }));
+    setChildrenMap((prev) => ({ ...prev, [selectedParentId]: cloned }));
+    alert(`원본 ${srcChildren.length}종을 가져왔습니다. [저장]을 눌러 확정하세요.`);
   };
 
   const selectedParent = parents.find((p) => p.id === selectedParentId) || parents[0] || SAMPLE_BOM_PARENTS[0];
@@ -245,7 +415,7 @@ export const BomNormalView: React.FC = () => {
                 data: parents,
               }),
           },
-          { key: 'copyImport', label: '복사가져오기', icon: 'importCopy', onClick: () => alert('타 제품 BOM 복사 완료') },
+          { key: 'copyImport', label: '복사가져오기', icon: 'importCopy', onClick: handleCopyFrom },
         ]}
         helpContent="제품 생산을 위한 표준 BOM 배합비(소요 원부자재, 생산기준량 대비 투입량, 레시피수율, 단위투입원가)를 등록하고 계산합니다."
       />
@@ -298,7 +468,11 @@ export const BomNormalView: React.FC = () => {
               columns={UPPER_COLUMNS}
               data={parents}
               selectedRowId={selectedParentId}
-              onRowClick={(row) => setSelectedParentId(row.id)}
+              onRowClick={(row) => {
+                setSelectedParentId(row.id);
+                const vs = versionsMap[row.id] || ['1.0'];
+                setVersion(vs[vs.length - 1]);
+              }}
               summaryRow={false}
             />
           </div>
@@ -312,14 +486,52 @@ export const BomNormalView: React.FC = () => {
               <span className="text-[11px] text-blue-900 bg-blue-100 px-2 py-0.2 rounded border border-blue-300 font-semibold">
                 {selectedParent.itemName} (총 단위투입원가: {selectedParent.unitCost.toLocaleString()}원)
               </span>
+              <select
+                value={version}
+                onChange={(e) => handleVersionChange(e.target.value)}
+                className="bg-white border border-gray-400 px-1.5 py-0.5 text-[11px] rounded-xs"
+                title="BOM 버전"
+              >
+                {(versionsMap[selectedParentId] || ['1.0']).map((v) => (
+                  <option key={v} value={v}>v{v}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleNewVersion}
+                className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded text-[11px] shadow-2xs"
+                title="현재 구성을 다음 버전으로 복제 저장"
+              >
+                새버전
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={handleAddChild}
-              className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded text-[11px] flex items-center gap-0.5 shadow-2xs"
-            >
-              <Plus size={11} /> 추가
-            </button>
+            <div className="flex items-center gap-1.5">
+              <select
+                value={copySourceId}
+                onChange={(e) => setCopySourceId(e.target.value)}
+                className="bg-white border border-gray-400 px-1.5 py-0.5 text-[11px] rounded-xs max-w-[200px]"
+                title="복사해올 원본 제품"
+              >
+                <option value="">원본 선택...</option>
+                {parents.filter((p) => p.id !== selectedParentId).map((p) => (
+                  <option key={p.id} value={p.id}>{p.itemName}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleCopyFrom}
+                className="px-2 py-0.5 bg-slate-600 hover:bg-slate-700 text-white font-medium rounded text-[11px] shadow-2xs"
+              >
+                복사해오기
+              </button>
+              <button
+                type="button"
+                onClick={handleAddChild}
+                className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded text-[11px] flex items-center gap-0.5 shadow-2xs"
+              >
+                <Plus size={11} /> 추가
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 min-h-0">
