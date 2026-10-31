@@ -4,62 +4,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { HelpCircle, RotateCcw, Calendar, Save } from 'lucide-react';
 
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
+import { DAY_CHARS, calcRow, splitWeek, type SheetRowInput } from '@/lib/gfs/orderCalc';
 
-interface SheetRow {
-  id: number;
-  supplier: string;
-  name: string;
-  boxesBase: number; // D 발주량박스(엑셀기준)
-  packUnit: number; // E 입수량(엑셀)
-  packUnitAudit: number; // P 입수량(정본)
-  days: number; // G 발주일수
-  dailyUsage: number; // H 일사용량
-  incoming: number; // I 입고량
-  currentStock: number; // J 금일재고
-  bagPrice: number; // Q 봉단가
-  warehouse: string;
-  vendor: string;
-  finalBoxes: number; // O 확정발주량 (편집)
-  manual: boolean;
-}
-
-const DAY_CHARS = ['월', '화', '수', '목', '금', '토', '일'];
-
-function parseDeliveryDays(header: string): boolean[] {
-  const hasAll = /월화수목금토/.test(header);
-  if (hasAll) return [true, true, true, true, true, true, false];
-  if (!/[월화수목금토일]/.test(header)) return [false, false, false, true, false, false, false];
-  return DAY_CHARS.map((d) => header.includes(d));
-}
-
-function calcRow(r: SheetRow) {
-  const pack = r.packUnit > 0 ? r.packUnit : r.packUnitAudit > 0 ? r.packUnitAudit : 0;
-  const totalStock = r.incoming + r.currentStock;
-  const required = r.dailyUsage * r.days;
-  const diff = totalStock - required;
-  const stockDays = r.dailyUsage > 0 ? totalStock / r.dailyUsage : 99;
-  const inpack = r.boxesBase * (r.packUnit || 0);
-  const shortage = Math.max(0, required - totalStock);
-  const suggest = pack > 0 ? Math.ceil(shortage / pack) : 0;
-  const finalBoxes = r.manual ? r.finalBoxes : suggest;
-  const amount = finalBoxes * pack * r.bagPrice;
-  const dailyBox = r.dailyUsage > 0 && pack > 0 ? r.dailyUsage / pack : 0;
-  return { pack, totalStock, required, diff, stockDays, inpack, suggest, finalBoxes, amount, dailyBox };
-}
-
-function splitWeek(r: SheetRow, finalBoxes: number): number[] {
-  const days = parseDeliveryDays(r.supplier || '');
-  const idx = days.map((on, i) => (on ? i : -1)).filter((i) => i >= 0);
-  const out = [0, 0, 0, 0, 0, 0, 0];
-  if (finalBoxes <= 0 || idx.length === 0) return out;
-  const base = Math.floor(finalBoxes / idx.length);
-  let rem = finalBoxes - base * idx.length;
-  idx.forEach((i) => {
-    out[i] = base + (rem > 0 ? 1 : 0);
-    if (rem > 0) rem -= 1;
-  });
-  return out;
-}
+interface SheetRow extends SheetRowInput {}
 
 export const MatOrderNormalView: React.FC = () => {
   const [orderDate, setOrderDate] = useState('2026-10-30');
