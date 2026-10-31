@@ -58,7 +58,10 @@ interface StockItem {
   safetyStock: number;
   shortage: number; // currentStock - safetyStock (negative = danger)
   status: string; // 품절/부족/과잉/정상
-  stockDays: number; // 재고유지일 = (현재고 + 입고량) / 일사용량 — 엑셀 N열과 동일식
+  stockDays: number; // 재고유지일 — 발주서 엑셀 N열과 동일, 편집 불가(정본 스냅샷)
+  exJ: number; // 유지일 계산용 엑셀 J(금일재고) 스냅샷
+  exI: number; // 유지일 계산용 엑셀 I(입고량) 스냅샷
+  exH: number; // 유지일 계산용 엑셀 H(일사용량) 스냅샷
   unitPrice: number;
   totalAmount: number; // currentStock * unitPrice
 }
@@ -71,10 +74,10 @@ export function calcStockStatus(current: number, safety: number): string {
   return '정상';
 }
 
-/** 재고유지일(일) = (현재고 + 입고량) / 일사용량 — 엑셀 N열과 동일식. 계산불가 -1 */
-export function calcStockDays(current: number, incoming: number, dailyBox: number): number {
-  if (!(dailyBox > 0)) return -1;
-  return (current + incoming) / dailyBox;
+/** 재고유지일(일) = (엑셀 J금일재고 + 엑셀 I입고량) / 엑셀 H일사용량 — 발주서 N열과 동일식. 계산불가 -1 */
+export function calcStockDays(excelJ: number, excelI: number, excelH: number): number {
+  if (!(excelH > 0)) return -1;
+  return (excelJ + excelI) / excelH;
 }
 
 /** 유통기한 임박일수 (YYYY-MM-DD만 판정, 파싱불가 -1) */
@@ -115,6 +118,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     safetyStock: 2000,
     status: '정상',
         stockDays: 669.23,
+        exJ: 3350, exI: 1000, exH: 6.5,
         shortage: 1350,
     unitPrice: 2850,
     totalAmount: 9547500,
@@ -143,6 +147,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     safetyStock: 300,
     status: '정상',
         stockDays: 178.13,
+        exJ: 450, exI: 120, exH: 3.2,
         shortage: 150,
     unitPrice: 4200,
     totalAmount: 1890000,
@@ -171,6 +176,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     safetyStock: 150,
     status: '부족',
         stockDays: 100,
+        exJ: 80, exI: 100, exH: 1.8,
         shortage: -70, // 부족!
     unitPrice: 11500,
     totalAmount: 920000,
@@ -199,6 +205,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     safetyStock: 20000,
     status: '정상',
         stockDays: 4560,
+        exJ: 37000, exI: 20000, exH: 12.5,
         shortage: 17000,
     unitPrice: 48,
     totalAmount: 1776000,
@@ -227,6 +234,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     safetyStock: 20,
     status: '정상',
         stockDays: 107.5,
+        exJ: 33, exI: 10, exH: 0.4,
         shortage: 13,
     unitPrice: 85000,
     totalAmount: 2805000,
@@ -255,6 +263,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     safetyStock: 2000,
     status: '부족',
         stockDays: 666.67,
+        exJ: 1400, exI: 0, exH: 2.1,
         shortage: -600, // 부족!
     unitPrice: 380,
     totalAmount: 532000,
@@ -283,6 +292,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     safetyStock: 500,
     status: '정상',
         stockDays: 174.39,
+        exJ: 930, exI: 500, exH: 8.2,
         shortage: 430,
     unitPrice: 8900,
     totalAmount: 8277000,
@@ -311,6 +321,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     safetyStock: 120,
     status: '부족',
         stockDays: 36.36,
+        exJ: 60, exI: 100, exH: 4.4,
         shortage: -60, // 부족!
     unitPrice: 12800,
     totalAmount: 768000,
@@ -339,6 +350,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     safetyStock: 100,
     status: '정상',
         stockDays: 64.71,
+        exJ: 180, exI: 150, exH: 5.1,
         shortage: 80,
     unitPrice: 4100,
     totalAmount: 738000,
@@ -367,6 +379,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     safetyStock: 60,
     status: '부족',
         stockDays: 34.21,
+        exJ: 50, exI: 80, exH: 3.8,
         shortage: -10, // 부족!
     unitPrice: 5300,
     totalAmount: 265000,
@@ -395,6 +408,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     safetyStock: 400,
     status: '정상',
         stockDays: 149.21,
+        exJ: 640, exI: 300, exH: 6.3,
         shortage: 240,
     unitPrice: 9700,
     totalAmount: 6208000,
@@ -423,6 +437,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     safetyStock: 300,
     status: '부족',
         stockDays: 96.3,
+        exJ: 260, exI: 0, exH: 2.7,
         shortage: -40, // 부족!
     unitPrice: 10500,
     totalAmount: 2730000,
@@ -451,6 +466,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     safetyStock: 800,
     status: '정상',
         stockDays: 60,
+        exJ: 1800, exI: 5400, exH: 120,
         shortage: 1000,
     unitPrice: 650,
     totalAmount: 1170000,
@@ -479,6 +495,7 @@ const SAMPLE_STOCK_DATA: StockItem[] = [
     safetyStock: 300,
     status: '정상',
         stockDays: 61.11,
+        exJ: 550, exI: 2200, exH: 45,
         shortage: 250,
     unitPrice: 2800,
     totalAmount: 1540000,
@@ -542,6 +559,8 @@ export const StockLookupView: React.FC = () => {
             const piece = Math.round((current % pack) * 10) / 10;
             const uprice = o && Number(o.bagPrice) > 0 ? Number(o.bagPrice) : price;
             const dailyU = o ? Number(o.dailyUsage) || 0 : 0;
+            const exJ = o ? Number(o.currentStock) || 0 : 0;
+            const exI = o ? Number(o.incoming) || 0 : 0;
             if (o) merged += 1;
             loaded.push({
               id: inv.id || idx + 1,
@@ -569,11 +588,13 @@ export const StockLookupView: React.FC = () => {
                 safetyStock: safety,
                 shortage: current - safety,
                 status: calcStockStatus(current, safety),
-                stockDays: calcStockDays(current, Number(o?.incoming) || 0, dailyU),
-              unitPrice: uprice,
-              totalAmount: current * uprice,
-            });
+                stockDays: calcStockDays(exJ, exI, dailyU),
+                exJ, exI, exH: dailyU,
+                unitPrice: uprice,
+                totalAmount: current * uprice,
+              });
           });
+          // 엑셀에만 있는 품목은 신규행으로 추가 (저장 시 품목 자동생성)
           // 엑셀에만 있는 품목은 신규행으로 추가 (저장 시 품목 자동생성)
           let tempId = -(Date.now() % 1000000) - 1;
           const freshIds = new Set<number>();
@@ -615,6 +636,9 @@ export const StockLookupView: React.FC = () => {
                 shortage: current - autoSafety,
                 status: calcStockStatus(current, autoSafety),
                 stockDays: calcStockDays(current, Number(o.incoming) || 0, daily),
+                exJ: current,
+                exI: Number(o.incoming) || 0,
+                exH: daily,
                 unitPrice: price,
                 totalAmount: current * price,
               };
@@ -685,9 +709,10 @@ export const StockLookupView: React.FC = () => {
         const unitPrice = Number(updated.unitPrice) || 0;
 
         // 과부족 및 재고금액 실시간 자동 계산
+        // 재고유지일은 발주서 정본 스냅샷 고정 (편집으로 바뀌지 않음)
         updated.shortage = currentStock - safetyStock;
         updated.status = calcStockStatus(currentStock, safetyStock);
-        updated.stockDays = calcStockDays(currentStock, Number(updated.inQty) || 0, Number(updated.dailyUsage) || 0);
+        updated.stockDays = calcStockDays(Number(updated.exJ) || 0, Number(updated.exI) || 0, Number(updated.exH) || 0);
         updated.totalAmount = currentStock * unitPrice;
 
         return updated;
@@ -702,6 +727,19 @@ export const StockLookupView: React.FC = () => {
     try {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array' });
+      // 발주서 정본 맵 (유지일 계산용 J/I/H) — 엑셀 우선
+      let orderByNorm = new Map<string, any>();
+      try {
+        const orderJson = await fetch('/api/gfs/order-sheet').then((r) => r.json());
+        if (orderJson?.success && Array.isArray(orderJson.data?.rows)) {
+          orderJson.data.rows.forEach((o: any) => {
+            const k = normName(o.name);
+            if (k && !orderByNorm.has(k)) orderByNorm.set(k, o);
+          });
+        }
+      } catch {
+        /* 정본 없으면 감사값으로 표시 */
+      }
       // 시트별 행 수집: R3 헤더, R4~ 데이터 (1거래처 2ID 3제품명 4입고일 5일사용량 7박스 8낱개 9현재고 10입수량 12봉단가)
       const byNorm = new Map<string, StockItem>();
       data.forEach((d) => {
@@ -747,6 +785,11 @@ export const StockLookupView: React.FC = () => {
           const autoSafety = calcSafetyStock(daily, pack, parseLeadDays(inbound));
           if (exist) {
             const newSafety = (!exist.safetyStock || exist.safetyStock <= 0) && autoSafety > 0 ? autoSafety : exist.safetyStock;
+            // 유지일: 발주서 정본 스냅샷 고정
+            const oRef = orderByNorm.get(norm);
+            const nxJ = oRef ? Number(oRef.currentStock) || 0 : 0;
+            const nxI = oRef ? Number(oRef.incoming) || 0 : 0;
+            const nxH = oRef ? Number(oRef.dailyUsage) || 0 : 0;
             const changed =
               exist.whName !== sheet ||
               (vendor && exist.vendor !== vendor) ||
@@ -754,7 +797,8 @@ export const StockLookupView: React.FC = () => {
               (price > 0 && exist.unitPrice !== price) ||
               (expiry && exist.expiryDate !== expiry) ||
               (pack > 0 && exist.packUnit !== pack) ||
-              newSafety !== exist.safetyStock;
+              newSafety !== exist.safetyStock ||
+              nxJ !== exist.exJ || nxI !== exist.exI || nxH !== exist.exH;
             exist.whName = sheet;
             if (vendor) exist.vendor = vendor;
             if (!exist.itemCode && itemId) exist.itemCode = itemId;
@@ -770,7 +814,10 @@ export const StockLookupView: React.FC = () => {
             exist.safetyStock = newSafety;
             exist.shortage = current - newSafety;
             exist.status = calcStockStatus(current, newSafety);
-            exist.stockDays = calcStockDays(current, 0, exist.dailyUsage);
+            exist.exJ = nxJ;
+            exist.exI = nxI;
+            exist.exH = nxH;
+            exist.stockDays = calcStockDays(nxJ, nxI, nxH);
             if (changed) {
               updated += 1;
               if (autoSafety > 0) autoFilled += 1;
@@ -781,6 +828,10 @@ export const StockLookupView: React.FC = () => {
           } else {
             const newSafety = autoSafety > 0 ? autoSafety : 0;
             if (autoSafety > 0) autoFilled += 1;
+            const oo = orderByNorm.get(norm);
+            const exJ = oo ? Number(oo.currentStock) || 0 : 0;
+            const exI = oo ? Number(oo.incoming) || 0 : 0;
+            const exH = oo ? Number(oo.dailyUsage) || 0 : 0;
             const row: StockItem = {
               id: tempId--,
               whName: sheet,
@@ -807,7 +858,8 @@ export const StockLookupView: React.FC = () => {
                 safetyStock: newSafety,
                 shortage: current - newSafety,
                 status: calcStockStatus(current, newSafety),
-                stockDays: calcStockDays(current, 0, daily),
+                stockDays: calcStockDays(exJ, exI, exH),
+                exJ, exI, exH,
                 unitPrice: price,
                 totalAmount: current * price,
               };
@@ -1186,8 +1238,8 @@ export const StockLookupView: React.FC = () => {
       sortable: true,
       editable: false,
       render: (v, row) => (
-        <span className={`font-mono ${Number(row.dailyUsage) > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
-          {Number(row.dailyUsage) > 0 && Number(v) >= 0 ? `${Number(v).toFixed(2)}일` : '-'}
+        <span className={`font-mono ${Number(row.exH) > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
+          {Number(row.exH) > 0 && Number(v) >= 0 ? `${Number(v).toFixed(2)}일` : '-'}
         </span>
       ),
     },
