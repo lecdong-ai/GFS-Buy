@@ -80,7 +80,7 @@ export const ProductRegView: React.FC = () => {
             stockDays: 1,
             moq: p.minOrderQty || 50,
             isRepresentative: true,
-            connectedCount: 2,
+            connectedCount: p.bomCount ?? 0,
             repName: p.name,
             reportNo: '20160456123-102',
             riceType: '초밥미반',
@@ -112,7 +112,7 @@ export const ProductRegView: React.FC = () => {
     setProducts((prev) =>
       prev.map((p) => {
         if (p.id === id) {
-          const numKeys = ['safetyStock', 'stockDays', 'moq', 'connectedCount', 'potProductQty', 'riceWeight', 'riceYield', 'logisticsRate'];
+          const numKeys = ['safetyStock', 'stockDays', 'moq', 'potProductQty', 'riceWeight', 'riceYield', 'logisticsRate'];
           const finalVal = numKeys.includes(key) ? Number(val) || 0 : val;
           return { ...p, [key]: finalVal };
         }
@@ -239,7 +239,7 @@ export const ProductRegView: React.FC = () => {
     { key: 'stockDays', label: '재고일수', width: '65px', align: 'right', format: 'number' },
     { key: 'moq', label: '최소주문수량', width: '85px', align: 'right', format: 'number', editable: true },
     { key: 'isRepresentative', label: '대표제품여부', width: '80px', align: 'center', format: 'checkbox' },
-    { key: 'connectedCount', label: '연결제품수', width: '70px', align: 'right', format: 'number' },
+    { key: 'connectedCount', label: '연결제품수(BOM)', width: '90px', align: 'right', format: 'number', editable: false },
     { key: 'repName', label: '대표제품명', width: '120px', align: 'left' },
     { key: 'reportNo', label: '품목제조보고번호', width: '130px', align: 'center' },
     { key: 'riceType', label: '밥유형', width: '85px', align: 'center' },

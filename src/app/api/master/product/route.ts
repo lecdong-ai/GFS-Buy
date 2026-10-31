@@ -32,6 +32,23 @@ export async function GET(req: NextRequest) {
       orderBy: { productCode: 'asc' },
     });
 
+    // BOM 구성품 수 (부모 기준 최신 버전 합산 → 버전별 중복 제외는 최신 버전만)
+    const headers = await prisma.bomHeader.findMany({
+      where: { parentProductId: { in: products.map((p) => p.id) } },
+      select: {
+        parentProductId: true,
+        version: true,
+        _count: { select: { details: true } },
+      },
+      orderBy: [{ parentProductId: 'asc' }, { version: 'desc' }],
+    });
+    const bomCountByParent = new Map<number, number>();
+    for (const h of headers) {
+      if (!bomCountByParent.has(h.parentProductId)) {
+        bomCountByParent.set(h.parentProductId, h._count.details);
+      }
+    }
+
     const formatted = products.map((p) => ({
       id: p.id,
       productCode: p.productCode,
@@ -53,6 +70,7 @@ export async function GET(req: NextRequest) {
       partnerName: p.partner?.name ?? '',
       gyeId: p.gyeId ?? '',
       gyeName: p.gye?.name ?? '',
+      bomCount: bomCountByParent.get(p.id) ?? 0,
     }));
 
     return NextResponse.json({ success: true, data: formatted });
