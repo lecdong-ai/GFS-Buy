@@ -10,7 +10,7 @@ export async function GET() {
     if (!session?.user) {
       return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
     }
-    const { audit, orderItems, suppliers, auditFile, orderFile } = loadCanonicalFromRepo();
+    const { audit, orderItems, suppliers, auditFile, orderFile, errors } = loadCanonicalFromRepo();
     const auditByNorm = new Map(audit.map((a) => [a.norm, a]));
     const rows = orderItems.map((o, idx) => {
       const ref = auditByNorm.get(o.norm);
@@ -43,6 +43,7 @@ export async function GET() {
         rowCount: withTarget,
         auditFile,
         orderFile,
+        errors,
       },
     });
   } catch (error: any) {

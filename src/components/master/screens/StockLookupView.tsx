@@ -551,7 +551,6 @@ export const StockLookupView: React.FC = () => {
   const [targetDate, setTargetDate] = useState('2026-10-30');
   const [selectedWh, setSelectedWh] = useState('전체');
   const [selectedType, setSelectedType] = useState('전체');
-  const [selectedSupplier, setSelectedSupplier] = useState('전체');
   const [selectedVendor, setSelectedVendor] = useState('전체');
   const [selectedStatus, setSelectedStatus] = useState('전체');
   const [selectedExpiry, setSelectedExpiry] = useState('전체');
@@ -761,6 +760,10 @@ export const StockLookupView: React.FC = () => {
           setMergeInfo(
             orderByNorm.size > 0
               ? `정본 병합: ${merged}건 반영 · 신규 ${added}건`
+              : orderJson?.data?.errors?.length
+              ? `정본 실패: ${orderJson.data.errors[0]}`
+              : orderJson && !orderJson.success
+              ? `정본 실패: ${orderJson.error || '알 수 없음'}`
               : '정본 없음 (DB만 표시)'
           );
         }
@@ -1113,12 +1116,6 @@ export const StockLookupView: React.FC = () => {
   };
 
   // Filtered rows
-  const suppliers = useMemo(() => {
-    const s = new Set<string>();
-    data.forEach((d) => { if (d.orderSupplier) s.add(d.orderSupplier); });
-    return [...s].sort((a, b) => a.localeCompare(b, 'ko'));
-  }, [data]);
-
   const vendors = useMemo(() => {
     const s = new Set<string>();
     data.forEach((d) => { if (d.vendor) s.add(d.vendor); });
@@ -1129,7 +1126,6 @@ export const StockLookupView: React.FC = () => {
     return data.filter((item) => {
       if (selectedWh !== '전체' && item.whName !== selectedWh) return false;
       if (selectedType !== '전체' && item.itemType !== selectedType) return false;
-      if (selectedSupplier !== '전체' && item.orderSupplier !== selectedSupplier) return false;
       if (selectedVendor !== '전체' && item.vendor !== selectedVendor) return false;
       if (selectedStatus !== '전체' && item.status !== selectedStatus) return false;
       if (selectedExpiry !== '전체') {
@@ -1146,12 +1142,11 @@ export const StockLookupView: React.FC = () => {
         const matchCode = item.itemCode.toLowerCase().includes(kw);
         const matchCat = item.category.toLowerCase().includes(kw);
         const matchVendor = (item.vendor || '').toLowerCase().includes(kw);
-        const matchSupplier = (item.orderSupplier || '').toLowerCase().includes(kw);
-        if (!matchName && !matchCode && !matchCat && !matchVendor && !matchSupplier) return false;
+        if (!matchName && !matchCode && !matchCat && !matchVendor) return false;
       }
       return true;
     });
-  }, [data, selectedWh, selectedType, selectedSupplier, selectedVendor, selectedStatus, selectedExpiry, targetDate, onlyShortage, keyword]);
+  }, [data, selectedWh, selectedType, selectedVendor, selectedStatus, selectedExpiry, targetDate, onlyShortage, keyword]);
 
   // Summaries
   const summaries = useMemo(() => {
@@ -1192,15 +1187,6 @@ export const StockLookupView: React.FC = () => {
       key: 'vendor',
       label: '거래처',
       width: '140px',
-      align: 'left',
-      sortable: true,
-      filterable: true,
-      editable: false,
-    },
-    {
-      key: 'orderSupplier',
-      label: '발주처',
-      width: '170px',
       align: 'left',
       sortable: true,
       filterable: true,
@@ -1587,23 +1573,6 @@ export const StockLookupView: React.FC = () => {
             </select>
           </div>
 
-          {/* Supplier (발주처) */}
-          <div className="flex items-center gap-1.5 ml-2">
-            <span className="font-semibold text-gray-700">발주처</span>
-            <select
-              value={selectedSupplier}
-              onChange={(e) => setSelectedSupplier(e.target.value)}
-              className="bg-white border border-gray-400 rounded px-2 py-0.5 text-[12px] max-w-[180px]"
-            >
-              <option value="전체">전체</option>
-              {suppliers.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-
           {/* Vendor (제조사) */}
           <div className="flex items-center gap-1.5 ml-2">
             <span className="font-semibold text-gray-700">거래처</span>
@@ -1658,7 +1627,7 @@ export const StockLookupView: React.FC = () => {
             <div className="relative">
               <input
                 type="text"
-                placeholder="품명/품번/품종/거래처/발주처 검색"
+                placeholder="품명/품번/품종/거래처 검색"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
                 className="bg-white border border-gray-400 rounded px-2 py-0.5 text-[12px] w-44"
@@ -1694,7 +1663,6 @@ export const StockLookupView: React.FC = () => {
               setKeyword('');
               setSelectedWh('전체');
               setSelectedType('전체');
-              setSelectedSupplier('전체');
               setSelectedVendor('전체');
               setSelectedStatus('전체');
               setSelectedExpiry('전체');

@@ -222,55 +222,77 @@ export function parseOrderSheet(wb: XLSX.WorkBook): { items: OrderSheetItem[]; s
     const r = rows[i];
     if (!r) continue;
     const a = r[0];
-    if (a && typeof a === 'string' && a.trim().length > 1) {
-      header = a.trim();
+    const b = r[1];
+    const c = r[2];
+    const aStr = a != null ? String(a).trim() : '';
+    const cStr = c != null ? String(c).trim() : '';
+    // 공급사 헤더행: A 있음 + B는 문자열/빈값 + C 비어있음 (메뉴행과 구분)
+    if (aStr.length > 1 && (typeof b === 'string' || b == null) && (c == null || cStr === '' || cStr === 'null')) {
+      header = aStr;
       suppliers.add(header);
       continue;
     }
-    const name = r[2];
+    // 자재행: C 품명 있음 + A 비어있음 (메뉴행 제외)
+    if (cStr === '' || cStr === 'null' || aStr !== '') continue;
+    const name = cStr;
     const boxes = r[3];
-    if (name && String(name).trim().length > 1) {
-      const nVal = Number(r[13]);
+    {
+      const nRaw = r[13];
+      const nVal = nRaw == null || (typeof nRaw === 'string' && nRaw.trim() === '') ? NaN : Number(nRaw);
       items.push({
-          name: String(name).trim(),
-          norm: normName(name),
-          supplierHeader: header,
-          boxes: typeof boxes === 'number' ? boxes : 0,
-          packUnit: Number(r[4]) || 0,
-          days: Number(r[6]) || 0,
-          dailyUsage: Number(r[7]) || 0,
-          incoming: Number(r[8]) || 0,
-          currentStock: Number(r[9]) || 0,
-          bagPrice: Number(r[16]) || 0,
-          stockDays: isNaN(nVal) ? null : nVal,
+        name: String(name).trim(),
+        norm: normName(name),
+        supplierHeader: header,
+        boxes: typeof boxes === 'number' ? boxes : 0,
+        packUnit: Number(r[4]) || 0,
+        days: Number(r[6]) || 0,
+        dailyUsage: Number(r[7]) || 0,
+        incoming: Number(r[8]) || 0,
+        currentStock: Number(r[9]) || 0,
+        bagPrice: Number(r[16]) || 0,
+        stockDays: isNaN(nVal) ? null : nVal,
       });
     }
   }
   return { items, suppliers: [...suppliers] };
 }
 
-/** 서버 커밋된 정본 파일에서 정본 맵 로드 */
+/** 서버 커밋된 정본 파일에서 정본 맵 로드 (파일별 독립, 실패해도 나머지는 반환) */
 export function loadCanonicalFromRepo(): {
   audit: AuditEntry[];
   orderItems: OrderSheetItem[];
   suppliers: string[];
   auditFile: string | null;
   orderFile: string | null;
+  errors: string[];
 } {
   let audit: AuditEntry[] = [];
   let orderItems: OrderSheetItem[] = [];
   let suppliers: string[] = [];
+  const errors: string[] = [];
   const auditFile = getAuditFilePath();
   const orderFile = getOrderSheetFilePath();
   if (auditFile) {
-    const wb = XLSX.readFile(auditFile);
-    audit = [...buildAuditMap(wb).values()];
+    try {
+      const wb = XLSX.readFile(auditFile);
+      audit = [...buildAuditMap(wb).values()];
+    } catch (e: any) {
+      errors.push(`재고조사표 로드 실패: ${e?.message || e}`);
+    }
+  } else {
+    errors.push('재고조사표 파일을 찾을 수 없음');
   }
   if (orderFile) {
-    const wb = XLSX.readFile(orderFile);
-    const parsed = parseOrderSheet(wb);
-    orderItems = parsed.items;
-    suppliers = parsed.suppliers;
+    try {
+      const wb = XLSX.readFile(orderFile);
+      const parsed = parseOrderSheet(wb);
+      orderItems = parsed.items;
+      suppliers = parsed.suppliers;
+    } catch (e: any) {
+      errors.push(`발주서 로드 실패: ${e?.message || e}`);
+    }
+  } else {
+    errors.push('발주서 파일을 찾을 수 없음');
   }
-  return { audit, orderItems, suppliers, auditFile, orderFile };
+  return { audit, orderItems, suppliers, auditFile, orderFile, errors };
 }
