@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
 // GET /api/inventory/stock?category=원재료&warehouse=상온보관고
@@ -124,3 +126,98 @@ export async function PUT(req: NextRequest) {
   }
 }
 
+
+// POST /api/inventory/stock - 재고 신규 생성 (재고조사표 업로드 등)
+// body: { items: [{ productCode?, productName, warehouse, currentQty, unitPrice, expiryDate, vendor? }] }
+export async function POST(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
+    }
+    const me = session.user as any;
+    const body = await req.json();
+    const items = body.items as Array<{
+      productCode?: string;
+      productName: string;
+      warehouse?: string;
+      currentQty?: number;
+      unitPrice?: number;
+      expiryDate?: string;
+      vendor?: string;
+    }>;
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ success: false, error: '생성할 재고 내역이 없습니다.' }, { status: 400 });
+    }
+
+    const created: { productCode: string; warehouse: string }[] = [];
+    for (const it of items) {
+      if (!it.productName && !it.productCode) continue;
+      let product = it.productCode
+        ? await prisma.product.findUnique({ where: { productCode: it.productCode } })
+        : await prisma.product.findFirst({ where: { name: it.productName } });
+      if (!product && it.productName) {
+        product = await prisma.product.findFirst({ where: { name: it.productName } });
+      }
+      if (!product) continue;
+      const warehouse = it.warehouse || product.warehouse || '상온';
+      const qty = Number(it.currentQty) || 0;
+      const price = Number(it.unitPrice) || 0;
+      // 같은 품목+창고 재고가 있으면 수량 갱신, 없으면 생성
+      const existInv = await prisma.inventory.findFirst({
+        where: { productId: product.id, warehouse },
+      });
+      if (existInv) {
+        await prisma.inventory.update({
+          where: { id: existInv.id },
+          data: {
+            currentQty: qty,
+            unitPrice: price,
+            stockAmount: qty * price,
+            expiryDate: it.expiryDate !== undefined ? String(it.expiryDate) : existInv.expiryDate,
+          },
+        });
+      } else {
+        await prisma.inventory.create({
+          data: {
+            productId: product.id,
+            productCode: product.productCode,
+            productName: it.productName || product.name,
+            category: product.category,
+            warehouse,
+            currentQty: qty,
+            unit: product.unit,
+            unitPrice: price,
+            stockAmount: qty * price,
+            expiryDate: it.expiryDate ? String(it.expiryDate) : '',
+            remark: '재고조사표 업로드 생성',
+          },
+        });
+      }
+      created.push({ productCode: product.productCode, warehouse });
+    }
+
+    await prisma.systemLog
+      .create({
+        data: {
+          logDate: new Date().toISOString(),
+          userId: Number(me.id) || undefined,
+          loginId: String(me.loginId || ''),
+          userName: String(me.name || ''),
+          action: '재고조사표업로드',
+          menuId: 'master-stock-lookup',
+          menuName: '재고조회',
+          detail: `${me.name || me.loginId} 재고조사표 업로드로 ${created.length}건 반영`,
+        },
+      })
+      .catch(() => {});
+
+    return NextResponse.json({ success: true, count: created.length, data: created });
+  } catch (error: any) {
+    console.error('Inventory stock create failed:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || '재고 생성에 실패했습니다.' },
+      { status: 500 }
+    );
+  }
+}

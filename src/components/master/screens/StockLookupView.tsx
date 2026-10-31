@@ -1,10 +1,23 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { MasterActionBar } from '../common/MasterActionBar';
 import { MasterDataGrid, MasterGridColumnDef } from '../common/MasterDataGrid';
 import { ChevronLeft, ChevronRight, RotateCw, Search } from 'lucide-react';
 import { exportGridToExcel } from '@/lib/excelExport';
+
+// 재고조사표 정본 시트 (서버 lib/gfs/canonical.ts와 동일 기준)
+const AUDIT_SHEETS = ['부자재', '냉장1', '냉장2', '냉동', '상온'] as const;
+
+/** 품명 정규화: [접두어]/괄호/기호 제거 + 소문자 */
+function normName(s: unknown): string {
+  return String(s ?? '')
+    .replace(/\[.+?\]/g, '')
+    .replace(/\(.+?\)/g, '')
+    .replace(/[^가-힣a-zA-Z0-9]/g, '')
+    .toLowerCase();
+}
 
 interface StockItem {
   id: number;
@@ -412,7 +425,10 @@ export const StockLookupView: React.FC = () => {
   const [keyword, setKeyword] = useState('');
   const [selectedRowId, setSelectedRowId] = useState<number | null>(null);
   const [dirtyRowIds, setDirtyRowIds] = useState<Set<number>>(new Set());
+  const [newRowIds, setNewRowIds] = useState<Set<number>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const loadStockData = () => {
     fetch('/api/inventory/stock')
@@ -455,6 +471,7 @@ export const StockLookupView: React.FC = () => {
           });
           setData(loaded);
           setDirtyRowIds(new Set());
+          setNewRowIds(new Set());
         }
       })
       .catch((err) => console.error('Failed to load stock data', err));
@@ -516,7 +533,128 @@ export const StockLookupView: React.FC = () => {
     setDirtyRowIds((prev) => new Set(prev).add(Number(rowId)));
   };
 
-  // 재고 직접 수정 내역 일괄 DB 저장
+  // 일일 재고조사표 엑셀 업로드 → 표 자동채움 (5시트 정본 그대로)
+  const handleUploadFile = async (file: File) => {
+    setIsUploading(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      // 시트별 행 수집: R3 헤더, R4~ 데이터 (1거래처 2ID 3제품명 4입고일 5일사용량 7박스 8낱개 9현재고 10입수량 12봉단가)
+      const byNorm = new Map<string, StockItem>();
+      data.forEach((d) => {
+        const k = normName(d.itemName);
+        if (k && !byNorm.has(k)) byNorm.set(k, d);
+      });
+      const next = data.map((d) => ({ ...d }));
+      const nextByNorm = new Map<string, StockItem>();
+      next.forEach((d) => {
+        const k = normName(d.itemName);
+        if (k && !nextByNorm.has(k)) nextByNorm.set(k, d);
+      });
+      const dirtyIds = new Set<number>(dirtyRowIds);
+      const freshIds = new Set<number>(newRowIds);
+      let added = 0;
+      let updated = 0;
+      let same = 0;
+      let tempId = -(Date.now() % 1000000) - 1;
+      for (const sheet of AUDIT_SHEETS) {
+        const ws = wb.Sheets[sheet];
+        if (!ws) continue;
+        const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+        for (let i = 4; i < rows.length; i++) {
+          const r = rows[i];
+          if (!r) continue;
+          const name = String(r[3] ?? '').trim();
+          if (name.length < 2) continue;
+          const norm = normName(name);
+          if (!norm) continue;
+          const box = Number(r[7]) || 0;
+          const piece = Number(r[8]) || 0;
+          const pack = Number(r[10]) || 0;
+          const current = Number(r[9]) || box * (pack || 0) + piece;
+          const price = Number(r[12]) || 0;
+          const vendor = String(r[1] ?? '').trim();
+          const itemId = r[2] != null && String(r[2]).trim() !== '' ? String(r[2]).trim() : '';
+          const inbound = String(r[4] ?? '').trim();
+          const daily = Number(r[5]) || 0;
+          const expiry = r[6] != null && String(r[6]).trim() !== '' ? String(r[6]).trim() : '';
+          const exist = nextByNorm.get(norm);
+          if (exist) {
+            const changed =
+              exist.whName !== sheet ||
+              (vendor && exist.vendor !== vendor) ||
+              exist.currentStock !== current ||
+              (price > 0 && exist.unitPrice !== price) ||
+              (expiry && exist.expiryDate !== expiry) ||
+              (pack > 0 && exist.packUnit !== pack);
+            exist.whName = sheet;
+            if (vendor) exist.vendor = vendor;
+            if (!exist.itemCode && itemId) exist.itemCode = itemId;
+            if (inbound) exist.inboundDate = inbound;
+            if (daily) exist.dailyUsage = daily;
+            if (expiry) exist.expiryDate = expiry;
+            if (pack > 0) exist.packUnit = pack;
+            exist.boxQty = box;
+            exist.pieceQty = piece;
+            exist.currentStock = current;
+            if (price > 0) exist.unitPrice = price;
+            exist.totalAmount = current * exist.unitPrice;
+            exist.shortage = current - exist.safetyStock;
+            if (changed) {
+              updated += 1;
+              dirtyIds.add(exist.id);
+            } else {
+              same += 1;
+            }
+          } else {
+            const row: StockItem = {
+              id: tempId--,
+              whName: sheet,
+              vendor,
+              itemCode: itemId,
+              itemType: sheet === '부자재' ? '부자재' : '원자재',
+              category: '원부자재',
+              itemName: name,
+              spec: '',
+              unit: 'box',
+              inboundDate: inbound,
+              expiryDate: expiry,
+              orderDay: '',
+              dailyUsage: daily,
+              packUnit: pack,
+              boxQty: box,
+              pieceQty: piece,
+              prevStock: current,
+              inQty: 0,
+              outQty: 0,
+              currentStock: current,
+              safetyStock: 100,
+              shortage: current - 100,
+              unitPrice: price,
+              totalAmount: current * price,
+            };
+            next.push(row);
+            nextByNorm.set(norm, row);
+            freshIds.add(row.id);
+            dirtyIds.add(row.id);
+            added += 1;
+          }
+        }
+      }
+      setData(next);
+      setDirtyRowIds(dirtyIds);
+      setNewRowIds(freshIds);
+      setTargetDate(new Date().toISOString().slice(0, 10));
+      alert(`업로드 반영 완료: 신규 ${added}건 · 변경 ${updated}건 · 동일 ${same}건\n확인 후 저장(Ctrl+S)하세요. 신규는 저장 시 품목 자동생성됩니다.`);
+    } catch (e: any) {
+      alert('엑셀 파싱 실패: ' + (e.message || '알 수 없는 오류'));
+    } finally {
+      setIsUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  // 재고 직접 수정 내역 일괄 DB 저장 (신규행은 품목 자동생성 후 재고 생성)
   const handleSave = async () => {
     if (dirtyRowIds.size === 0) {
       alert('수정된 재고 내역이 없습니다.');
@@ -525,9 +663,58 @@ export const StockLookupView: React.FC = () => {
 
     setIsSaving(true);
     try {
-      const updates = data
-        .filter((d) => dirtyRowIds.has(d.id))
-        .map((d) => ({
+      const dirty = data.filter((d) => dirtyRowIds.has(d.id));
+      const existing = dirty.filter((d) => !newRowIds.has(d.id));
+      const fresh = dirty.filter((d) => newRowIds.has(d.id));
+
+      // 1) 신규행: 품목 자동생성(materialize) → 재고 생성(POST)
+      if (fresh.length > 0) {
+        const matRes = await fetch('/api/gfs/materialize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: fresh.map((d) => ({
+              name: d.itemName,
+              boxes: 1,
+              packUnit: d.packUnit,
+              bagPrice: d.unitPrice,
+              supplierHeader: d.vendor,
+            })),
+          }),
+        });
+        const matJson = await matRes.json();
+        if (!matJson.success) {
+          alert(`신규 품목 생성 실패: ${matJson.error || '알 수 없는 오류'}`);
+          return;
+        }
+        const codeByNorm = new Map<string, string>();
+        (matJson.data?.matched || []).forEach((m: any) => {
+          if (m.productCode && m.productName) codeByNorm.set(normName(m.productName), m.productCode);
+        });
+        const createItems = fresh.map((d) => ({
+          productCode: codeByNorm.get(normName(d.itemName)) || d.itemCode || undefined,
+          productName: d.itemName,
+          warehouse: d.whName,
+          currentQty: d.currentStock,
+          unitPrice: d.unitPrice,
+          expiryDate: d.expiryDate,
+          vendor: d.vendor,
+        }));
+        const postRes = await fetch('/api/inventory/stock', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: createItems }),
+        });
+        const postJson = await postRes.json();
+        if (!postJson.success) {
+          alert(`신규 재고 생성 실패: ${postJson.error || '알 수 없는 오류'}`);
+          return;
+        }
+      }
+
+      // 2) 기존행: PUT 일괄 갱신
+      if (existing.length > 0) {
+        const updates = existing.map((d) => ({
           id: d.id,
           warehouse: d.whName,
           currentQty: d.currentStock,
@@ -537,19 +724,23 @@ export const StockLookupView: React.FC = () => {
           expiryDate: d.expiryDate,
         }));
 
-      const res = await fetch('/api/inventory/stock', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updates }),
-      });
+        const res = await fetch('/api/inventory/stock', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ updates }),
+        });
 
-      const json = await res.json();
-      if (json.success) {
-        setDirtyRowIds(new Set());
-        alert(`총 ${json.count || updates.length}건의 재고 정보가 성공적으로 저장되었습니다.`);
-      } else {
-        alert(`저장 실패: ${json.error || '알 수 없는 오류'}`);
+        const json = await res.json();
+        if (!json.success) {
+          alert(`저장 실패: ${json.error || '알 수 없는 오류'}`);
+          return;
+        }
       }
+
+      setDirtyRowIds(new Set());
+      setNewRowIds(new Set());
+      alert(`저장 완료: 신규 ${fresh.length}건 · 수정 ${existing.length}건`);
+      loadStockData();
     } catch (err: any) {
       console.error(err);
       alert(`저장 중 오류 발생: ${err.message}`);
@@ -831,6 +1022,12 @@ export const StockLookupView: React.FC = () => {
           },
           { key: 'search', label: '조회', icon: 'search', onClick: loadStockData },
           {
+            key: 'upload',
+            label: isUploading ? '업로드 중...' : '재고조사표 업로드',
+            icon: 'upload',
+            onClick: () => fileRef.current?.click(),
+          },
+          {
             key: 'download',
             label: '엑셀다운로드',
             icon: 'download',
@@ -844,6 +1041,16 @@ export const StockLookupView: React.FC = () => {
           },
         ]}
         helpContent="창고별/품목별 실시간 이월재고, 입출고, 현재고, 안전재고 대비 과부족 및 재고금액을 조회하고 수정/저장할 수 있습니다. (마우스 클릭으로 직접 입력 가능, Ctrl+S로 저장)"
+      />
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleUploadFile(f);
+        }}
       />
 
       {/* 2. Filter Bar */}
