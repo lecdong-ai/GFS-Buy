@@ -271,9 +271,9 @@ export const MatOrderNormalView: React.FC = () => {
                 <th className="border border-[#9098aa] px-1.5 py-0.5 w-[40px]">No</th>
                 <th className="border border-[#9098aa] px-2 py-0.5 min-w-[160px] text-left">거래처명</th>
                 <th className="border border-[#9098aa] px-2 py-0.5 min-w-[280px] text-left">품목</th>
-                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[75px]" title="D 발주량박스(엑셀기준)">발주량박스</th>
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[75px]" title="D 발주량박스 = F/E">발주량박스</th>
                 <th className="border border-[#9098aa] px-1 py-0.5 min-w-[60px]" title="E 입수량">입수량</th>
-                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[75px]" title="F 발주량입수 = D×E">발주량입수</th>
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[75px]" title="F 발주량입수 = L-K">발주량입수</th>
                 <th className="border border-[#9098aa] px-1 py-0.5 min-w-[60px]" title="G 발주일수">발주일수</th>
                 <th className="border border-[#9098aa] px-1 py-0.5 min-w-[70px]" title="H 일사용량">일사용량</th>
                 <th className="border border-[#9098aa] px-1 py-0.5 min-w-[70px]" title="I 입고량(입수)">입고량</th>
@@ -304,9 +304,9 @@ export const MatOrderNormalView: React.FC = () => {
                   <td className="border border-gray-300 text-center text-gray-500 font-mono text-[11px] bg-gray-50">{idx + 1}</td>
                   <td className="border border-gray-300 whitespace-nowrap px-2 py-0.5 text-left text-gray-800" title={row.supplier}>{row.supplier}</td>
                   <td className="border border-gray-300 whitespace-nowrap px-2 py-0.5 text-left font-medium" title={`${row.name}${row.vendor ? ` / ${row.vendor}` : ''}${row.warehouse ? ` [${row.warehouse}]` : ''}`}>{row.name}</td>
-                  <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-600">{row.boxesBase || '-'}</td>
-                  <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-600">{row.packUnit || '-'}</td>
-                  <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-700">{c.inpack ? c.inpack.toLocaleString() : '-'}</td>
+                    <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-600">{Number.isFinite(c.boxesStd) ? Math.round(c.boxesStd * 10) / 10 : '-'}</td>
+                    <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-600">{c.pack || '-'}</td>
+                    <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-700">{Number.isFinite(c.shortageBags) ? Math.round(c.shortageBags * 10) / 10 : '-'}</td>
                   <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono">{row.days || '-'}</td>
                   <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono">{row.dailyUsage || '-'}</td>
                   <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono">{row.incoming || '-'}</td>
@@ -317,7 +317,7 @@ export const MatOrderNormalView: React.FC = () => {
                     {Number.isFinite(c.diff) ? (c.diff > 0 ? `+${Math.round(c.diff)}` : Math.round(c.diff)) : '-'}
                   </td>
                   <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-600">
-                    {Number.isFinite(c.stockDays) && c.stockDays !== 99 ? (Math.round(c.stockDays * 10) / 10) : '-'}
+                        {Number.isFinite(c.stockDays) ? (Math.round(c.stockDays * 100) / 100) : '-'}
                   </td>
                   <td className="border border-gray-300 p-0 text-right font-mono bg-amber-50/40">
                     <input

@@ -21,15 +21,16 @@ export const DAY_CHARS = ['월', '화', '수', '목', '금', '토', '일'] as co
 
 export interface CalcResult {
   pack: number;
-  totalStock: number;
-  required: number;
-  diff: number;
-  stockDays: number;
-  inpack: number;
-  suggest: number;
-  finalBoxes: number;
-  amount: number;
-  dailyBox: number;
+  totalStock: number; // K = I(입고량) + J(금일재고)
+  required: number; // L = G(발주일수) x H(일사용량)
+  diff: number; // M = K - L
+  stockDays: number; // N = K / H
+  shortageBags: number; // F = L - K (발주량입수, 부호 유지)
+  boxesStd: number; // D = F / E (발주량박스, 부호 유지, 소수 가능)
+  suggest: number; // O 제안 = ceil(max(0,F)/pack)
+  finalBoxes: number; // O 확정 (수기 or 제안)
+  amount: number; // R = O x P x Q
+  dailyBox: number; // AA = H*7.5/E/7
 }
 
 export function calcRow(r: SheetRowInput): CalcResult {
@@ -37,14 +38,14 @@ export function calcRow(r: SheetRowInput): CalcResult {
   const totalStock = r.incoming + r.currentStock;
   const required = r.dailyUsage * r.days;
   const diff = totalStock - required;
-  const stockDays = r.dailyUsage > 0 ? totalStock / r.dailyUsage : 99;
-  const inpack = r.boxesBase * (r.packUnit || 0);
-  const shortage = Math.max(0, required - totalStock);
-  const suggest = pack > 0 ? Math.ceil(shortage / pack) : 0;
+  const stockDays = r.dailyUsage > 0 ? totalStock / r.dailyUsage : NaN;
+  const shortageBags = required - totalStock;
+  const boxesStd = pack > 0 ? shortageBags / pack : NaN;
+  const suggest = pack > 0 ? Math.ceil(Math.max(0, shortageBags) / pack) : 0;
   const finalBoxes = r.manual ? r.finalBoxes : suggest;
   const amount = finalBoxes * pack * r.bagPrice;
-  const dailyBox = r.dailyUsage > 0 && pack > 0 ? r.dailyUsage / pack : 0;
-  return { pack, totalStock, required, diff, stockDays, inpack, suggest, finalBoxes, amount, dailyBox };
+  const dailyBox = r.dailyUsage > 0 && pack > 0 ? (r.dailyUsage * 7.5) / pack / 7 : NaN;
+  return { pack, totalStock, required, diff, stockDays, shortageBags, boxesStd, suggest, finalBoxes, amount, dailyBox };
 }
 
 /** 거래처 헤더에서 납품요일 파싱 (월~일 순서 boolean) */
