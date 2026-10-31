@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { MasterActionBar } from '../common/MasterActionBar';
 import { MasterDataGrid, MasterGridColumnDef } from '../common/MasterDataGrid';
 import { exportGridToExcel, downloadExcelTemplate } from '@/lib/excelExport';
@@ -36,9 +36,12 @@ const SAMPLE_PRODUCTS: ProductItem[] = [
 
 export const ProductRegView: React.FC = () => {
   const [allChecked, setAllChecked] = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [categoryFilter, setCategoryFilter] = useState('완성품');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [vendorFilter, setVendorFilter] = useState('ALL');
+  const [audit, setAudit] = useState<any>(null);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [products, setProducts] = useState<ProductItem[]>(SAMPLE_PRODUCTS);
   const [dirtyRowIds, setDirtyRowIds] = useState<Set<number>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
@@ -70,6 +73,52 @@ export const ProductRegView: React.FC = () => {
       })
       .catch((err) => console.error('Failed to load products from API:', err));
   }, []);
+
+  // 구분별 건수 + 이름겹침(완성품/자재 중복) 탐지
+  const catCounts = useMemo(() => {
+    const m: Record<string, number> = { 완성품: 0, 반제품: 0, 원재료: 0, 부자재: 0 };
+    products.forEach((p) => {
+      if (m[p.category] !== undefined) m[p.category] += 1;
+    });
+    return m;
+  }, [products]);
+
+  const dupNorms = useMemo(() => {
+    const byNorm = new Map<string, Set<string>>();
+    products.forEach((p) => {
+      const k = p.itemName.replace(/\[.+?\]/g, '').replace(/\(.+?\)/g, '').replace(/[^가-힣a-zA-Z0-9]/g, '').toLowerCase();
+      if (!k) return;
+      if (!byNorm.has(k)) byNorm.set(k, new Set());
+      byNorm.get(k)!.add(p.category);
+    });
+    const dups = new Set<string>();
+    byNorm.forEach((cats, k) => {
+      if (cats.size > 1) dups.add(k);
+    });
+    return dups;
+  }, [products]);
+
+  const normOf = (s: string) =>
+    s.replace(/\[.+?\]/g, '').replace(/\(.+?\)/g, '').replace(/[^가-힣a-zA-Z0-9]/g, '').toLowerCase();
+
+  // 품명 정본 대조 (엑셀 vs ERP)
+  const handleNameAudit = async () => {
+    setAuditLoading(true);
+    try {
+      const res = await fetch('/api/gfs/name-audit');
+      const json = await res.json();
+      if (json.success) {
+        setAudit(json.data);
+        setAuditOpen(true);
+      } else {
+        alert('대조 실패: ' + (json.error || '알 수 없는 오류'));
+      }
+    } catch (e: any) {
+      alert('대조 중 오류: ' + e.message);
+    } finally {
+      setAuditLoading(false);
+    }
+  };
 
   const filteredProducts = products.filter((p) => {
     if (categoryFilter !== 'ALL' && p.category !== categoryFilter) return false;
@@ -186,7 +235,21 @@ export const ProductRegView: React.FC = () => {
     { key: 'itemCode', label: '품번', width: '90px', align: 'center', editable: false },
     { key: 'category', label: '구분', width: '65px', align: 'center', format: 'dropdown', options: ['완성품', '반제품', '원재료', '부재료'] },
     { key: 'variety', label: '품종', width: '75px', align: 'center', format: 'dropdown', options: ['조리면', '샌드위치', '도시락', '주먹밥', '김밥', '햄버거'] },
-    { key: 'itemName', minWidth: '260px', label: '품명', align: 'left', editable: true },
+    { key: 'itemName', minWidth: '260px', label: '품명', align: 'left', editable: true,
+      render: (val, row) => {
+        const isDup = dupNorms.has(normOf(String(row.itemName || '')));
+        return (
+          <span className="flex items-center gap-1.5">
+            <span>{String(val ?? '')}</span>
+            {isDup && (
+              <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap" title="같은 이름이 다른 구분에도 있음">
+                중복
+              </span>
+            )}
+          </span>
+        );
+      },
+    },
     { key: 'spec', label: '규격', width: '95px', align: 'center', editable: true },
     { key: 'unit', label: '단위', width: '50px', align: 'center', editable: true },
     { key: 'gyeName', label: '계명칭', width: '110px', align: 'left' },
@@ -203,6 +266,7 @@ export const ProductRegView: React.FC = () => {
         title="제품등록"
         buttons={[
           { key: 'new', label: '신규', icon: 'new', onClick: handleNew },
+          { key: 'audit', label: auditLoading ? '대조 중...' : '정본대조', icon: 'search', onClick: handleNameAudit },
           { key: 'search', label: '조회', icon: 'search', onClick: () => alert('제품 목록 조회 완료') },
           {
             key: 'save',
@@ -261,17 +325,25 @@ export const ProductRegView: React.FC = () => {
 
           <div className="flex items-center gap-1 pl-3 border-l border-gray-300">
             <span className="font-semibold text-gray-700">구분:</span>
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="bg-white border border-gray-400 px-1.5 py-0.5 text-[12px] rounded-xs shadow-2xs focus:outline-blue-500"
-            >
-              <option value="ALL">ALL (전체)</option>
-              <option value="완성품">완성품</option>
-              <option value="반제품">반제품</option>
-              <option value="원재료">원재료</option>
-              <option value="부재료">부재료</option>
-            </select>
+            <div className="flex items-center gap-0.5 bg-gray-200/70 p-0.5 rounded border border-gray-300">
+              {['전체', '완성품', '반제품', '원재료', '부자재'].map((c) => {
+                const key = c === '전체' ? 'ALL' : c;
+                const isActive = categoryFilter === key;
+                const cnt = c === '전체' ? products.length : catCounts[c] || 0;
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setCategoryFilter(key)}
+                    className={`px-2 py-0.5 text-[11px] font-bold rounded-xs whitespace-nowrap ${
+                      isActive ? 'bg-white text-blue-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    {c} <span className="font-mono">{cnt}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex items-center gap-1 pl-3 border-l border-gray-300">
@@ -302,6 +374,29 @@ export const ProductRegView: React.FC = () => {
           데이터수: <span className="text-blue-700 font-bold">2329</span>
         </span>
       </div>
+
+      {auditOpen && audit && (
+        <div className="bg-amber-50 border-b border-amber-300 px-3 py-1.5 text-[12px] shrink-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="font-bold text-gray-800">정본대조 (발주서 정본 기준)</span>
+            <span>엑셀 자재 <strong className="text-blue-700">{audit.excelMaterials}</strong> · 메뉴 <strong className="text-blue-700">{audit.excelMenus}</strong> · ERP <strong className="text-blue-700">{audit.erpCount}</strong></span>
+            <span>미등록 자재 <strong className="text-red-700">{audit.missingMaterials?.length ?? 0}</strong> · 미등록 메뉴 <strong className="text-red-700">{audit.missingMenus?.length ?? 0}</strong> · 엑셀외 ERP <strong className="text-gray-700">{audit.erpNotInExcel?.length ?? 0}</strong> · 이름겹침 <strong className="text-amber-700">{audit.dupNames?.length ?? 0}</strong></span>
+            <button type="button" onClick={() => setAuditOpen(false)} className="ml-auto px-2 py-0.5 bg-white border border-gray-400 rounded text-[11px] hover:bg-gray-100">닫기</button>
+          </div>
+          {(audit.missingMaterials?.length > 0 || audit.missingMenus?.length > 0) && (
+            <div className="mt-1 grid grid-cols-2 gap-2 max-h-[120px] overflow-auto">
+              <div className="bg-white border border-gray-300 rounded p-1.5">
+                <div className="font-bold text-[11px] text-red-700 mb-0.5">미등록 자재 (BOM 일괄적재로 생성 가능)</div>
+                <div className="text-[11px] text-gray-700 leading-relaxed">{audit.missingMaterials.slice(0, 50).join(' / ')}{audit.missingMaterials.length > 50 ? ` 외 ${audit.missingMaterials.length - 50}건` : ''}</div>
+              </div>
+              <div className="bg-white border border-gray-300 rounded p-1.5">
+                <div className="font-bold text-[11px] text-red-700 mb-0.5">미등록 메뉴 (BOM 일괄적재로 생성 가능)</div>
+                <div className="text-[11px] text-gray-700 leading-relaxed">{audit.missingMenus.slice(0, 50).join(' / ')}{audit.missingMenus.length > 50 ? ` 외 ${audit.missingMenus.length - 50}건` : ''}</div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 p-2">
         <div className="h-full flex flex-col bg-white border border-[#94a3b8] rounded shadow-xs">
